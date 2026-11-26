@@ -271,6 +271,7 @@
     <Compile Include="XInputPoller.cs" />
     <Compile Include="ControllerHotkeys.cs" />
     <Compile Include="HotkeysLayout.cs" />
+    <Compile Include="UpdateChecker.cs" />
     <Compile Include="SonyHidGuidePoller.cs" />
     <Compile Include="DesktopControllerNav.cs" />
     <Compile Include="CursorAutoHide.cs" />

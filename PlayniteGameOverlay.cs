@@ -360,6 +360,7 @@ namespace PlayniteGameOverlay
         public override void OnApplicationStarted(OnApplicationStartedEventArgs args)
         {
             logger.Info("Starting Overlay Extension...");
+            UpdateChecker.StartAutoCheck(this, playniteAPI, logger); // update-checks
 
             DesktopControllerNav.Initialize(playniteAPI);
 
@@ -8943,6 +8944,7 @@ namespace PlayniteGameOverlay
                 ControllerHotkeySuspend = savedSettings.ControllerHotkeySuspend;
                 ControllerHotkeyMute = savedSettings.ControllerHotkeyMute;
                 HotkeysLayout_Load(savedSettings); // hotkeys-layout
+                UpdateChecks_Load(savedSettings); // update-checks
                 if (savedSettings.HotkeyGameSettings != null)
                     HotkeyGameSettings = savedSettings.HotkeyGameSettings;
                 if (savedSettings.HotkeyGlobalSettings != null)
@@ -9197,6 +9199,7 @@ namespace PlayniteGameOverlay
             _controllerHotkeySuspendBackup = ControllerHotkeySuspend;
             _controllerHotkeyMuteBackup = ControllerHotkeyMute;
             HotkeysLayout_Backup(); // hotkeys-layout
+            UpdateChecks_Backup(); // update-checks
             _volumeControlModeBackup = VolumeControlMode;
             _hotkeyGameSettingsBackup = HotkeyGameSettings;
             _hotkeyGlobalSettingsBackup = HotkeyGlobalSettings;
@@ -9305,6 +9308,7 @@ namespace PlayniteGameOverlay
             ControllerHotkeySuspend = _controllerHotkeySuspendBackup;
             ControllerHotkeyMute = _controllerHotkeyMuteBackup;
             HotkeysLayout_Restore(); // hotkeys-layout
+            UpdateChecks_Restore(); // update-checks
             VolumeControlMode = _volumeControlModeBackup;
             HotkeyGameSettings = _hotkeyGameSettingsBackup;
             HotkeyGlobalSettings = _hotkeyGlobalSettingsBackup;

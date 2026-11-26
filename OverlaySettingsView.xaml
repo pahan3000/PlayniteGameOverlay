@@ -1376,6 +1376,44 @@
           </Border>
         </StackPanel>
       </Expander>
+      <!-- Updates -->
+      <Expander IsExpanded="False" Margin="0,0,0,8">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <Path Style="{StaticResource Win11OutlineIcon}" Data="{StaticResource UpdateIconGeometry}"/>
+            <TextBlock Text="Updates" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Expander.Header>
+        <StackPanel Margin="0">
+          <Border Style="{StaticResource SettingRow}">
+            <StackPanel>
+              <TextBlock Style="{StaticResource SettingNote}" Margin="0,0,0,8" Text="{x:Static local:UpdateChecker.InstalledVersionLabel}"/>
+              <StackPanel Orientation="Horizontal">
+                <Button HorizontalAlignment="Left" Click="CheckForUpdatesButton_Click">
+                  <StackPanel Orientation="Horizontal">
+                    <Path Style="{StaticResource Win11OutlineIcon}" Data="{StaticResource SearchIconGeometry}" Width="16" Height="16" Margin="0,0,8,0"/>
+                    <TextBlock Text="{x:Static local:UpdateChecker.CheckButtonLabel}" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </Button>
+                <Button x:Name="UpdateOpenButton" Margin="8,0,0,0" Visibility="Collapsed" Content="Open download page" Click="UpdateOpenButton_Click"/>
+              </StackPanel>
+              <TextBlock x:Name="UpdateStatusText" Style="{StaticResource SettingNote}" Margin="0,8,0,0" Visibility="Collapsed"/>
+            </StackPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRowLast}">
+            <DockPanel>
+              <ComboBox DockPanel.Dock="Right" Width="180" VerticalAlignment="Center" SelectedValuePath="Tag" SelectedValue="{Binding UpdateCheckMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                <ComboBoxItem Content="Check on every start" Tag="Start"/>
+                <ComboBoxItem Content="Check daily" Tag="Daily"/>
+                <ComboBoxItem Content="Check weekly" Tag="Weekly"/>
+                <ComboBoxItem Content="Check monthly" Tag="Monthly"/>
+                <ComboBoxItem Content="Never check" Tag="Never"/>
+              </ComboBox>
+              <TextBlock Text="{x:Static local:UpdateChecker.AutoCheckLabel}" VerticalAlignment="Center"/>
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </Expander>
     </StackPanel>
   </ScrollViewer>
     <Border x:Name="PreviewDockFrame" Grid.Column="1" Visibility="Collapsed"
