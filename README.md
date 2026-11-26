@@ -123,16 +123,6 @@ A **Complete uninstall** option in the game menu runs the normal launcher uninst
 3. Restart Playnite.
 4. Open the settings via **Add-ons → Extensions → Generic → Playnite Overlay 3000**.
 
-### Optional companions
-
-| Extension | Used for |
-| --- | --- |
-| [PlayniteAchievements](https://github.com/justin-delano/PlayniteAchievements) | Achievement panel (preferred source) |
-| SuccessStory | Achievement panel (fallback) |
-| [FPS Limiter 3000](https://github.com/pahan3000/fps-limiter-3000) | FPS limiter panel |
-| RivaTuner Statistics Server (RTSS) | Frame limiting backend |
-| Vortex | Vortex link and mod leftover cleanup |
-
 ## Building from source
 
 See [BUILD_AND_PACKAGE.md](BUILD_AND_PACKAGE.md). In short: install Visual Studio 2022 with the .NET desktop workload and the .NET Framework 4.6.2 targeting pack, install Playnite, then run `build-overlay.bat` (or `pack.ps1`). The `.pext` appears in `release\`.
