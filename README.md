@@ -10,13 +10,21 @@ It also adds a set of quality-of-life tools to Playnite itself: faster game laun
 
 ## Screenshots
 
-<!-- Put your five images in a screenshots/ folder and rename them to match, or edit the paths and captions below. -->
+**In-game overlay**
 
-| | |
+![In-game overlay](screenshots/overlay.png)
+
+**Achievements**
+
+![Achievements list](screenshots/achievements.png)
+
+**Settings**
+
+| General | Appearance (with live preview) |
 | --- | --- |
-| ![Overlay](screenshots/overlay.png)<br>**In-game overlay** | ![Sound and FPS panels](screenshots/panels.png)<br>**Sound and FPS limiter panels** |
-| ![Achievements](screenshots/achievements.png)<br>**Achievements** | ![Appearance settings](screenshots/appearance.png)<br>**Appearance settings** |
-| ![Settings](screenshots/settings.png)<br>**Extension settings** | |
+| ![General settings](screenshots/settings-general.png) | ![Appearance settings](screenshots/appearance.png) |
+
+![Overlay buttons settings](screenshots/buttons.png)
 
 ---
 
@@ -26,7 +34,7 @@ It also adds a set of quality-of-life tools to Playnite itself: faster game laun
 
 - **Open with keyboard or controller.** Default keyboard shortcut is **Alt + `** (backtick). Default controller shortcut is **View + Menu** (Back + Start), or switch it to the **Xbox / Guide** button, or disable it.
 - **Session panel** with playtime for this session and all-time playtime.
-- **Achievements panel** showing your unlock progress and the most recently earned achievement, with rarity tiers (Bronze / Silver / Gold) based on how many players have unlocked it. Reads from [PlayniteAchievements](https://github.com/justin-delano/PlayniteAchievements) (preferred) or SuccessStory, auto-detected. Choose a compact **Desktop** or larger **Console** card style.
+- **Achievements panel** showing your unlock progress and the most recently earned achievement, with rarity tiers (Bronze / Silver / Gold) based on how many players have unlocked it. Reads from [PlayniteAchievements](https://github.com/justin-delano/PlayniteAchievements) (preferred) or SuccessStory, auto-detected. Choose a compact **Desktop** or larger **Console** card style. A full achievements window lists every achievement with icon, description, unlock date and rarity, filterable by All / Unlocked / Locked, with earned totals per tier.
 - **Sound panel** with volume slider, mute, and output-device switching. Control either **system volume** or **game-only audio volume**.
 - **FPS limiter panel** with one-click presets, a custom limit, and sync mode selection (Async, Front Edge, Back Edge, Scanline, Reflex), including scanline target and Reflex marker toggle. Works through RTSS. Needs the [FPS Limiter 3000](https://github.com/pahan3000/fps-limiter-3000) extension.
 - **Battery indicator** for laptops and handhelds.
