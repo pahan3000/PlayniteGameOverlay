@@ -1,200 +1,1393 @@
-﻿<UserControl x:Class="PlayniteGameOverlay.OverlaySettingsView"
-             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:local="clr-namespace:PlayniteGameOverlay" xmlns:System="clr-namespace:System;assembly=mscorlib">
-
-    <UserControl.Resources>
-        <ObjectDataProvider x:Key="ControllerShortcutEnum" 
-                    MethodName="GetValues" 
-                    ObjectType="{x:Type System:Enum}">
-            <ObjectDataProvider.MethodParameters>
-                <x:Type TypeName="local:ControllerShortcut"/>
-            </ObjectDataProvider.MethodParameters>
-        </ObjectDataProvider>
-        <ObjectDataProvider x:Key="CloseBehaviorEnum" 
-                    MethodName="GetValues" 
-                    ObjectType="{x:Type System:Enum}">
-            <ObjectDataProvider.MethodParameters>
-                <x:Type TypeName="local:CloseBehavior"/>
-            </ObjectDataProvider.MethodParameters>
-        </ObjectDataProvider>
-        <ObjectDataProvider x:Key="AspectRatioEnum" 
-                    MethodName="GetValues" 
-                    ObjectType="{x:Type System:Enum}">
-            <ObjectDataProvider.MethodParameters>
-                <x:Type TypeName="local:AspectRatio"/>
-            </ObjectDataProvider.MethodParameters>
-        </ObjectDataProvider>
-        <local:EnumDescriptionConverter x:Key="EnumDescriptionConverter" />
-    </UserControl.Resources>
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
-        <StackPanel Margin="20" MaxWidth="800">
-            <TextBlock Text="Game Overlay Settings" 
-                   FontWeight="Bold" 
-                   FontSize="16" 
-                   Margin="0,0,0,15"/>
-
-            <TextBlock Text="Controller Shortcut:" 
-                   Margin="0,0,0,5"/>
-            <ComboBox ItemsSource="{Binding Source={StaticResource ControllerShortcutEnum}}"
-          SelectedItem="{Binding ControllerShortcut}"
-          Width="270"
-          HorizontalAlignment="Left"
-          Margin="0,0,0,15">
-                <ComboBox.ItemTemplate>
+<UserControl xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:local="clr-namespace:PlayniteGameOverlay" xmlns:System="clr-namespace:System;assembly=mscorlib" x:Class="PlayniteGameOverlay.OverlaySettingsView">
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ExtensionTheme.xaml"/>
+      </ResourceDictionary.MergedDictionaries>
+      <SolidColorBrush x:Key="AccentBrush" Color="#FF66C0F4"/>
+      <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#FF1A1D23"/>
+      <!-- Windows 11 volume-style slider: thin rail, accent fill, white thumb + soft accent halo -->
+      <Style x:Key="FluentSliderRailButton" TargetType="RepeatButton">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="Background" Value="#FF8A8A8A"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="RepeatButton">
+              <Grid Background="Transparent">
+                <Border Height="3" CornerRadius="1.5" Background="{TemplateBinding Background}" VerticalAlignment="Center"/>
+              </Grid>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <Style x:Key="FluentSliderThumb" TargetType="Thumb">
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Width" Value="28"/>
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="Thumb">
+              <Grid Background="Transparent">
+                <!-- Covers the rail under the knob so no grey rim shows through -->
+                <Ellipse Width="16" Height="16" Fill="{DynamicResource PanelBackgroundBrush}"/>
+                <Ellipse x:Name="Knob" Width="14" Height="14" Fill="#FFFFFFFF"/>
+              </Grid>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsDragging" Value="True">
+                  <Setter TargetName="Knob" Property="Fill" Value="#FFFFFFFF"/>
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <ControlTemplate x:Key="FluentSliderTemplate" TargetType="Slider">
+        <Grid x:Name="SliderRoot" Background="Transparent" SnapsToDevicePixels="False" Height="28" MinHeight="28" Cursor="Hand">
+          <!-- Full unfilled rail -->
+          <Border Height="3" CornerRadius="1.5" Background="#FF8A8A8A" VerticalAlignment="Center" Margin="14,0" IsHitTestVisible="False"/>
+          <!-- Track is visual only — pointer drag is handled in code (smooth under Viewbox) -->
+          <Track x:Name="PART_Track" VerticalAlignment="Center" IsHitTestVisible="False">
+            <Track.DecreaseRepeatButton>
+              <RepeatButton Style="{StaticResource FluentSliderRailButton}" Background="{DynamicResource AccentBrush}" IsHitTestVisible="False"/>
+            </Track.DecreaseRepeatButton>
+            <Track.IncreaseRepeatButton>
+              <RepeatButton Style="{StaticResource FluentSliderRailButton}" Background="Transparent" IsHitTestVisible="False"/>
+            </Track.IncreaseRepeatButton>
+            <Track.Thumb>
+              <Thumb x:Name="SliderThumb" Style="{StaticResource FluentSliderThumb}" IsHitTestVisible="False"/>
+            </Track.Thumb>
+          </Track>
+        </Grid>
+        <ControlTemplate.Triggers>
+          <Trigger Property="IsKeyboardFocusWithin" Value="True">
+            <Setter TargetName="SliderThumb" Property="Tag" Value="focused"/>
+          </Trigger>
+          <Trigger Property="IsEnabled" Value="False">
+            <Setter Property="Opacity" Value="0.4"/>
+          </Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate>
+      <Style x:Key="OverlayFocusSlider" TargetType="Slider">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Focusable" Value="True"/>
+        <Setter Property="IsTabStop" Value="True"/>
+        <Setter Property="IsMoveToPointEnabled" Value="False"/>
+        <Setter Property="IsSnapToTickEnabled" Value="False"/>
+        <Setter Property="IsManipulationEnabled" Value="False"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template" Value="{StaticResource FluentSliderTemplate}"/>
+        <!-- Sliders inside collapsed Expanders are not in the visual tree when the view loads,
+                 so each one hooks itself the first time it is actually created. -->
+        <EventSetter Event="Loaded" Handler="Slider_Loaded"/>
+      </Style>
+      <ObjectDataProvider x:Key="ControllerShortcutEnum" MethodName="GetValues" ObjectType="{x:Type System:Enum}">
+        <ObjectDataProvider.MethodParameters>
+          <x:Type TypeName="local:ControllerShortcut"/>
+        </ObjectDataProvider.MethodParameters>
+      </ObjectDataProvider>
+      <ObjectDataProvider x:Key="CloseBehaviorEnum" MethodName="GetValues" ObjectType="{x:Type System:Enum}">
+        <ObjectDataProvider.MethodParameters>
+          <x:Type TypeName="local:CloseBehavior"/>
+        </ObjectDataProvider.MethodParameters>
+      </ObjectDataProvider>
+      <ObjectDataProvider x:Key="AspectRatioEnum" MethodName="GetValues" ObjectType="{x:Type System:Enum}">
+        <ObjectDataProvider.MethodParameters>
+          <x:Type TypeName="local:AspectRatio"/>
+        </ObjectDataProvider.MethodParameters>
+      </ObjectDataProvider>
+      <local:EnumDescriptionConverter x:Key="EnumDescriptionConverter"/>
+      <local:ShortcutLabelConverter x:Key="ShortcutLabelConverter"/>
+      <ObjectDataProvider x:Key="ButtonPromptStyleEnum" MethodName="GetValues" ObjectType="{x:Type System:Enum}">
+        <ObjectDataProvider.MethodParameters>
+          <x:Type TypeName="local:ButtonPromptStyle"/>
+        </ObjectDataProvider.MethodParameters>
+      </ObjectDataProvider>
+      <Style x:Key="HotkeyRow" TargetType="Grid">
+        <Setter Property="Margin" Value="0,0,0,6"/>
+      </Style>
+      <SolidColorBrush x:Key="UiCard" Color="#FF23262E"/>
+      <SolidColorBrush x:Key="UiCardHover" Color="#FF3D4450"/>
+      <SolidColorBrush x:Key="UiBorder" Color="#FF23262E"/>
+      <SolidColorBrush x:Key="UiBorderHover" Color="#FF434953"/>
+      <SolidColorBrush x:Key="UiDivider" Color="#FF3D4450"/>
+      <SolidColorBrush x:Key="UiAccent" Color="#FF4A9EFF"/>
+      <SolidColorBrush x:Key="PreviewSurfaceBrush" Color="#FF1E2028"/>
+      <Style x:Key="GlobalSettingsButton" TargetType="Button">
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="Background" Value="{DynamicResource UiButton}"/>
+        <Setter Property="Foreground" Value="#FFF1F3F6"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="12,7"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontFamily" Value="{DynamicResource FontFamily}"/>
+        <Setter Property="FontSize" Value="{DynamicResource FontSize}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="Button">
+              <Border x:Name="Surface" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource UiButtonCornerRadius}">
+                <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="Surface" Property="Opacity" Value="0.86"/>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                  <Setter TargetName="Surface" Property="Opacity" Value="0.70"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter Property="Opacity" Value="0.45"/>
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <Style TargetType="Button" BasedOn="{StaticResource GlobalSettingsButton}"/>
+      <Style x:Key="ReShadePanel" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource UiCard}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource UiDivider}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="7"/>
+        <Setter Property="Padding" Value="14,12"/>
+      </Style>
+      <!-- Global settings use the same enclosed section treatment as the per-game menu. -->
+      <ControlTemplate x:Key="UnifiedSectionTemplate" TargetType="Expander">
+        <Border x:Name="Outer" Background="{DynamicResource UiCard}" BorderBrush="{DynamicResource UiBorder}" BorderThickness="1" CornerRadius="{DynamicResource UiSectionCornerRadius}">
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" MinHeight="42"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Border x:Name="HeaderBg" Grid.Row="0" Background="Transparent" CornerRadius="{DynamicResource UiSectionHeaderCornerRadius}">
+              <Grid>
+                <Border x:Name="ExpandedAccent" Width="3" HorizontalAlignment="Left" Margin="0,8,0,8" CornerRadius="1.5" Background="{DynamicResource ReShadeAccent}" Visibility="Collapsed" IsHitTestVisible="False"/>
+                <ToggleButton x:Name="HeaderToggle" IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" Background="Transparent" BorderThickness="0" Cursor="Hand" Padding="13,0">
+                  <ToggleButton.Template>
+                    <ControlTemplate TargetType="ToggleButton">
+                      <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter ContentSource="Content" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                      </Border>
+                    </ControlTemplate>
+                  </ToggleButton.Template>
+                  <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+                </ToggleButton>
+              </Grid>
+            </Border>
+            <Border x:Name="ContentBorder" Grid.Row="1" Visibility="Collapsed" BorderBrush="{DynamicResource UiDivider}" BorderThickness="0,1,0,0" Padding="14,12,14,14" Background="{DynamicResource ReShadeBg}" CornerRadius="{DynamicResource UiSectionContentCornerRadius}">
+              <ContentPresenter ContentSource="Content"/>
+            </Border>
+          </Grid>
+        </Border>
+        <ControlTemplate.Triggers>
+          <Trigger Property="IsMouseOver" Value="True">
+            <Setter TargetName="Outer" Property="BorderBrush" Value="{DynamicResource UiBorderHover}"/>
+            <Setter TargetName="HeaderBg" Property="Background" Value="{DynamicResource UiCardHover}"/>
+          </Trigger>
+          <Trigger Property="IsExpanded" Value="True">
+            <Setter TargetName="ContentBorder" Property="Visibility" Value="Visible"/>
+            <Setter TargetName="HeaderBg" Property="Background" Value="{DynamicResource UiExpandedHeader}"/>
+            <Setter TargetName="ExpandedAccent" Property="Visibility" Value="Visible"/>
+            <Setter TargetName="Outer" Property="BorderBrush" Value="{DynamicResource UiBorderHover}"/>
+          </Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate>
+      <!-- Separate neutral cards follow Windows Settings; open state stays clear without arrows. -->
+      <ControlTemplate x:Key="Windows11SectionTemplate" TargetType="Expander">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" MinHeight="52"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <Border x:Name="HeaderBg" Background="{DynamicResource UiCard}" CornerRadius="4">
+            <Grid>
+              <Border x:Name="ExpandedAccent" Width="3" HorizontalAlignment="Left" Margin="0,9,0,9" CornerRadius="1.5" Background="{DynamicResource ReShadeAccent}" Visibility="Collapsed" Opacity="0.8" IsHitTestVisible="False"/>
+              <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" Cursor="Hand" Padding="16,12" HorizontalContentAlignment="Stretch">
+                <ToggleButton.Template>
+                  <ControlTemplate TargetType="ToggleButton">
+                    <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                      <ContentPresenter ContentSource="Content" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                    </Border>
+                  </ControlTemplate>
+                </ToggleButton.Template>
+                <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" VerticalAlignment="Center"/>
+              </ToggleButton>
+            </Grid>
+          </Border>
+          <ContentPresenter x:Name="ContentSite" Grid.Row="1" Visibility="Collapsed" ContentSource="Content" Margin="0,5,0,0"/>
+        </Grid>
+        <ControlTemplate.Triggers>
+          <Trigger Property="IsMouseOver" Value="True">
+            <Setter TargetName="HeaderBg" Property="Background" Value="{DynamicResource UiHeaderHover}"/>
+          </Trigger>
+          <Trigger Property="IsExpanded" Value="True">
+            <Setter TargetName="ContentSite" Property="Visibility" Value="Visible"/>
+            <Setter TargetName="HeaderBg" Property="Background" Value="{DynamicResource UiExpandedHeader}"/>
+            <Setter TargetName="ExpandedAccent" Property="Visibility" Value="Visible"/>
+          </Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate>
+      <Style x:Key="TreeBranchExpander" TargetType="Expander">
+        <Setter Property="IsExpanded" Value="False"/>
+        <Setter Property="Foreground" Value="{DynamicResource ReShadeText}"/>
+        <Setter Property="Template" Value="{StaticResource Windows11SectionTemplate}"/>
+        <Setter Property="Margin" Value="0,0,0,10"/>
+      </Style>
+      <Style TargetType="Expander" BasedOn="{StaticResource TreeBranchExpander}"/>
+      <!-- Setting rows: one clear block per setting, with a divider -->
+      <Style x:Key="SteamSettingsRow" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource UiCard}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="16,12"/>
+        <Setter Property="MinHeight" Value="56"/>
+        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="Margin" Value="0,0,0,5"/>
+      </Style>
+      <Style TargetType="CheckBox" BasedOn="{StaticResource OverlaySettingsSwitch}"/>
+      <Style x:Key="SettingRow" TargetType="Border" BasedOn="{StaticResource SteamSettingsRow}"/>
+      <Style x:Key="SettingRowLast" TargetType="Border" BasedOn="{StaticResource SettingRow}"/>
+      <Style x:Key="SettingNote" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource ReShadeTextMuted}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="LineHeight" Value="17"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+        <Setter Property="Margin" Value="0,3,0,0"/>
+      </Style>
+    </ResourceDictionary>
+  </UserControl.Resources>
+  <Grid x:Name="SettingsLayoutRoot">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition x:Name="SettingsContentColumn" Width="*"/>
+      <ColumnDefinition x:Name="PreviewPaneColumn" Width="0"/>
+    </Grid.ColumnDefinitions>
+  <ScrollViewer x:Name="SettingsScrollViewer" Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Background="{DynamicResource ReShadeBg}">
+    <StackPanel Margin="24,20,24,24">
+      <!-- General -->
+      <Expander IsExpanded="False" Margin="0,0,0,8">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <Path Style="{StaticResource Win11OutlineIcon}" Data="{StaticResource GearIconGeometry}"/>
+            <TextBlock Text="General" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Expander.Header>
+        <StackPanel Margin="0">
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="160"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Close behavior" VerticalAlignment="Center"/>
+                <ComboBox Grid.Column="1" Width="220" HorizontalAlignment="Left" ItemsSource="{Binding Source={StaticResource CloseBehaviorEnum}}" SelectedItem="{Binding CloseBehavior}">
+                  <ComboBox.ItemTemplate>
                     <DataTemplate>
-                        <TextBlock>
-                            <TextBlock.Text>
-                                <Binding Path="." Converter="{StaticResource EnumDescriptionConverter}" />
-                            </TextBlock.Text>
-                        </TextBlock>
+                      <TextBlock Text="{Binding Converter={StaticResource EnumDescriptionConverter}}"/>
                     </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-
-            <TextBlock Text="Close Game Behavior:" 
-         Margin="0,0,0,5"/>
-            <ComboBox ItemsSource="{Binding Source={StaticResource CloseBehaviorEnum}}"
-                SelectedItem="{Binding CloseBehavior}"
-                Width="270"
-                HorizontalAlignment="Left"
-                Margin="0,0,0,15">
-                <ComboBox.ItemTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </Grid>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="160"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Cover shape" VerticalAlignment="Center"/>
+                <ComboBox Grid.Column="1" Width="220" HorizontalAlignment="Left" ItemsSource="{Binding Source={StaticResource AspectRatioEnum}}" SelectedItem="{Binding AspectRatio}">
+                  <ComboBox.ItemTemplate>
                     <DataTemplate>
-                        <TextBlock>
-                            <TextBlock.Text>
-                                <Binding Path="." Converter="{StaticResource EnumDescriptionConverter}" />
-                            </TextBlock.Text>
-                        </TextBlock>
+                      <TextBlock Text="{Binding Converter={StaticResource EnumDescriptionConverter}}"/>
                     </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-
-            <TextBlock Text="Note for using Guide Button for controller activation: Ensure you disable Guide Button detection in all other programs. Check Steam and Xbox GameBar settings and inside playnite, disable 'Show Playnite When Guide Button is Pressed'" TextWrapping="Wrap"
-           Margin="0,0,0,20" Foreground="#888888" />
-            <TextBlock Text="Note: The keyboard shortcut is Alt + Backtick" 
-           Margin="0,0,0,20" Foreground="#888888"/>
-            <TextBlock Text="Cover Shape:" 
-           Margin="0,0,0,5"/>
-            <ComboBox ItemsSource="{Binding Source={StaticResource AspectRatioEnum}}"
-            SelectedItem="{Binding AspectRatio}"
-            Width="270"
-            HorizontalAlignment="Left"
-            Margin="0,0,0,15">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock>
-                            <TextBlock.Text>
-                                <Binding Path="." Converter="{StaticResource EnumDescriptionConverter}" />
-                            </TextBlock.Text>
-                        </TextBlock>
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-            </ComboBox>
-            <CheckBox IsChecked="{Binding DebugMode}" 
-                  Content="Enable Debug Mode" 
-                  Margin="0,10,0,5"/>
-            <TextBlock Text="Shows additional debugging information in the overlay. Useful if a game is not able to be exited. Also causes the overlay to output a LOAD of logs to the debugger console." 
-                   Margin="0,0,0,15"
-                   Foreground="#888888"/>
-
-            <TextBlock Text="Buttons" FontSize="18" />
-            <TextBlock 
-           Margin="0,0,0,15"
-           Foreground="#888888">
-            Keyboard shortcuts are written in SendKeys format. Ctrl is written as '^', Shift as '+', and Alt as '%'. See more info <Hyperlink NavigateUri="https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.sendkeys.send?view=windowsdesktop-9.0" RequestNavigate="Hyperlink_RequestNavigate">here</Hyperlink>
-            </TextBlock>
-
-            <!-- Recording gameplay toggle -->
-            <CheckBox IsChecked="{Binding ShowDiscord}" 
-          Content="Show Discord Button" 
-          Margin="0,10,0,5"/>
-            <Grid Margin="20,0,0,15">
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </Grid>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
+                  <ColumnDefinition Width="160"/>
+                  <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="Note: Discord launches really weirdly so path is not customizable" Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"/>
-            </Grid>
-
-            <!-- Recording gameplay toggle -->
-            <CheckBox IsChecked="{Binding ShowRecordGameplay}" 
-          Content="Show Record Gameplay Button" 
-          Margin="0,10,0,5"/>
-            <Grid Margin="20,0,0,15">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Shortcut:" Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                <TextBox Grid.Column="1" Text="{Binding RecordGameplayShortcut}"/>
-            </Grid>
-
-            <!-- Record recent gameplay toggle -->
-            <CheckBox IsChecked="{Binding ShowRecordRecent}" 
-          Content="Show Record Recent Gameplay Button" 
-          Margin="0,10,0,5"/>
-            <Grid Margin="20,0,0,15">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Shortcut:" Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                <TextBox Grid.Column="1" Text="{Binding RecordRecentShortcut}"/>
-            </Grid>
-
-            <!-- Streaming toggle -->
-            <CheckBox IsChecked="{Binding ShowStreaming}" 
-          Content="Show Streaming Button" 
-          Margin="0,10,0,5"/>
-            <Grid Margin="20,0,0,15">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Shortcut:" Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                <TextBox Grid.Column="1" Text="{Binding StreamingShortcut}"/>
-            </Grid>
-
-            <!-- Performance overlay toggle -->
-            <CheckBox IsChecked="{Binding ShowPerformanceOverlay}" 
-          Content="Show Performance Overlay Button" 
-          Margin="0,10,0,5"/>
-            <Grid Margin="20,0,0,15">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Shortcut:" Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                <TextBox Grid.Column="1" Text="{Binding PerformanceOverlayShortcut}"/>
-            </Grid>
-
-            <!-- Screenshot gallery toggle -->
-            <CheckBox IsChecked="{Binding ShowScreenshotGallery}" 
-          Content="Show Screenshot Gallery Button" 
-          Margin="0,10,0,5"/>
-            <Grid Margin="20,0,0,15">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Directory:" Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                <TextBox Grid.Column="1" Text="{Binding ScreenshotGalleryPath}"/>
-            </Grid>
-
-            <!-- Web browser toggle -->
-            <CheckBox IsChecked="{Binding ShowWebBrowser}" 
-          Content="Show Web Browser Button" 
-          Margin="0,10,0,5"/>
-            <Grid Margin="20,0,0,15">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="Browser Path:" Grid.Column="0" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                <TextBox Grid.Column="1" Text="{Binding WebBrowserPath}"/>
-            </Grid>
+                <TextBlock Text="Settings theme" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                  <ComboBox Width="220" HorizontalAlignment="Left" SelectedValuePath="Tag" SelectedValue="{Binding SettingsThemePreset, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                    <ComboBoxItem Content="Steam" Tag="Steam"/>
+                    <ComboBoxItem Content="Steam Dark" Tag="Steam Dark"/>
+                    <ComboBoxItem Content="Windows 11" Tag="Windows 11"/>
+                  </ComboBox>
+                  <CheckBox Content="Glass effect" IsChecked="{Binding SettingsMenuGlass}" Margin="14,0,0,0" VerticalAlignment="Center" ToolTip="Glass effect for these settings menus (global and per-game)"/>
+                </StackPanel>
+              </Grid>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Suspend game while overlay open" IsChecked="{Binding PauseGameWhileOverlayOpen}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Suspends the game process while the overlay is open. Unreal Engine and Easy Anti-Cheat games are never suspended."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <!-- hotkeys-layout: the PrintScreen remap now lives under Hotkeys > Keyboard -->
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Alt+F4 force-close" IsChecked="{Binding EnableAltF4InstantClose}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Alt+F4 closes the game straight away."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Force Windows Game Mode in all games" IsChecked="{Binding EnableWindowsGameModeRegistration}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Only 2 out of 10 games actually use Windows Game Mode by default. This option aims to fix that. Shout-out to Kaldaien for sharing the code."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Automatically assign the PC platform to manually added games" IsChecked="{Binding AutoPcPlatformForNewGames}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Games you add yourself will be assigned the PC platform."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Borderless window mode" IsChecked="{Binding BorderlessWindowedGames}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Removes the window border and fills the screen. Applies the next time a game starts."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
         </StackPanel>
-    </ScrollViewer>
+      </Expander>
+      <!-- Controller -->
+      <Expander IsExpanded="False" Margin="0,0,0,8">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <Path Style="{StaticResource Win11OutlineIcon}" Data="{StaticResource ControllerIconGeometry}"/>
+            <TextBlock Text="Controller" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Expander.Header>
+        <StackPanel Margin="0">
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="160"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Controller shortcut" VerticalAlignment="Center"/>
+                <ComboBox Grid.Column="1" Width="220" HorizontalAlignment="Left" ItemsSource="{Binding Source={StaticResource ControllerShortcutEnum}}" SelectedItem="{Binding ControllerShortcut}">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                      <TextBlock>
+                        <TextBlock.Text>
+                          <MultiBinding Converter="{StaticResource ShortcutLabelConverter}">
+                            <Binding/>
+                            <Binding Path="DataContext.ButtonPromptStyle" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                          </MultiBinding>
+                        </TextBlock.Text>
+                      </TextBlock>
+                    </DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </Grid>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Desktop controller navigation" IsChecked="{Binding EnableDesktopControllerNav}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Use a controller in Playnite Desktop. A selects, B goes back."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Show gamepad button prompts" IsChecked="{Binding ShowGamepadHints}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Shows a hint bar in the overlay with the controller buttons for moving, selecting and going back."/>
+                <Grid Margin="0,8,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="160"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Button prompt style" VerticalAlignment="Center"/>
+                  <ComboBox Grid.Column="1" Width="220" HorizontalAlignment="Left"
+                            ItemsSource="{Binding Source={StaticResource ButtonPromptStyleEnum}}"
+                            SelectedItem="{Binding ButtonPromptStyle}"
+                            IsEnabled="{Binding ShowGamepadHints}">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate>
+                        <TextBlock Text="{Binding Converter={StaticResource EnumDescriptionConverter}}"/>
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                </Grid>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Auto shows PlayStation symbols (L1, R1, L2, R2, ✕, ○ icons) when a DualShock 4 / DualSense is the pad in use, and Xbox labels otherwise. The Controller shortcut names above follow this too."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRowLast}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Hide cursor on gamepad" IsChecked="{Binding HideCursorOnGamepad}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Hides the mouse pointer while you use a controller."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </Expander>
+      <!-- Instant Play -->
+      <Expander IsExpanded="False" Margin="0,0,0,8">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <Viewbox Width="20" Height="20" Margin="-1,0,13,0" VerticalAlignment="Center">
+                <Canvas Width="48" Height="48">
+                  <Path Data="m21.7234 10.4255 c2.766 -2.6383 7.383 -3.8085 8.2766 -3.0851 1.2707 1.0286 .234 6.9574 -.6809 9.6383" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m23.6443 11.636 c.794 .4076 2.8849 2.1967 3.7742 3.1919 .9052 -.9105 1.2659 -4.6348 .6276 -5.1515 -.4489 -.3634 -3.2277 .6168 -4.4018 1.9596 Z" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m19.383 34.0213 c2.617 -.4787 4.2553 -1.3085 5.234 -3.3962" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m22.9894 30.3617 c1.8936 -.5745 2.3085 .2634 2.3085 1" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m8.7902 22.4676 c-.5668 .3968 -.7291 1.452 -.5859 3.0934 .1681 1.9269 .8228 2.9022 1.3696 2.832 .5468 -.0701 .8202 -1.4518 .6106 -3.086 -.0142 -.1107 -.0303 -.2198 -.048 -.3268" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m4.9502 30.1108 c.4851 .3652 1.1242 .6889 1.8548 .9126 1.8152 .5558 3.5081 .2835 3.7811 -.6081 .273 -.8917 -.9772 -2.065 -2.7925 -2.6208 s-3.5081 -.2835 -3.7811 .6081 c-.1631 .5328 .2176 1.1661 .9377 1.7082 Z" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m7.005 31.081 c2.0801 4.0786 6.0077 5.6941 9.4737 6.0679 4.734 .5106 7.698 -1.5138 8.1383 -1.8298 1.8085 -1.2979 2.6869 -2.5717 2.6869 -4.443 s-.8731 -3.3883 -3.3883 -3.3883 c-1.8713 0 -2.3997 .8419 -4.1231 2.1983 -.5333 .4197 -1.75 1.0585 -4.7267 .7663 -2.1736 -.2134 -2.7574 -1.7397 -4.853 -1.2218" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m20.7891 28.8362 c1.8898 -2.7159 2.1436 -3.7478 2.5266 -7.95 .3686 -4.0444 -.9362 -5.9681 -2.7021 -6.4149 -2.6885 -.6802 -8.0266 3.5745 -9.1277 9.0319 -.4472 2.2164 -1.6915 2.3298 -2.6957 -1.0356 -.1599 -.5358 -.3109 -5.9594 -1.8099 -5.8101 -.6406 .0638 -1.1861 .89 -1.4541 1.5871" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m44.4149 12.9149 C38.1915 1.7447 21.7993 4.1772 14.1489 8.8298 c-3.1322 1.9048 -7.2768 4.5406 -8.6305 9.4428 -.6762 2.4488 -.656 5.4632 .5347 9.2345" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m34.1064 16.9787 c4.5809 -4.2725 8.0743 -3.9697 10.3085 -4.0638" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m44.9149 29.7872 c.8723 -6.7872 -4.6809 -10.9149 -10.8085 -12.8085" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m34.5059 29.8561 c5.7601 -2.3682 9.7589 -.3956 10.409 -.0688" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m40.7926 41.3191 c.4787 -3.9574 -.8777 -8.9597 -6.2867 -11.4631" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m18.1915 37.2311 c8.8085 -.6566 14.8085 -.8481 22.6011 4.0881" Style="{StaticResource SonicStroke}"/>
+                  <Path Data="m5.9996 16.8811 c-1.9783 -2.9662 -1.7514 -8.1196 -.9295 -8.9236 .6959 -.6809 5.2704 .0851 7.3586 1.9501" Style="{StaticResource SonicStroke}"/>
+                  <Ellipse Canvas.Left="17.9419" Canvas.Top="20.9409" Width="2.6224" Height="7.0292" Style="{StaticResource SonicStrokeShape}"/>
+                </Canvas>
+              </Viewbox>
+            <TextBlock Text="Instant Play" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Expander.Header>
+        <StackPanel Margin="0">
+          <TextBlock Style="{StaticResource SettingNote}" Margin="4,4,4,8" Text="Starts games directly from the EXE, skipping the storefront launch process (including cloud-save sync and dependency installation such as Microsoft Visual C++ and DirectX). You can turn it off for single games. Thanks to the Special K team for the idea."/>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Steam games" IsChecked="{Binding EnableSteamInstantPlay}" Margin="0"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="GOG games" IsChecked="{Binding EnableGogInstantPlay}" Margin="0"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Xbox games" IsChecked="{Binding EnableXboxInstantPlay}" Margin="0"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Epic games" IsChecked="{Binding EnableEpicInstantPlay}" Margin="0"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRowLast}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Ubisoft games" IsChecked="{Binding EnableUbisoftInstantPlay}" Margin="0"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </Expander>
+      <!-- Links -->
+      <Expander IsExpanded="False" Margin="0,0,0,8">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <Path Style="{StaticResource Win11OutlineIcon}" Data="{StaticResource LinkIconGeometry}"/>
+            <TextBlock Text="Links" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Expander.Header>
+        <StackPanel Margin="0">
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Add PCGamingWiki and Nexus Mods links to PC games" IsChecked="{Binding AutoAddGameLinks}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Adds both links to each PC game's Links in Playnite."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Add GameBanana mod links for matching games" IsChecked="{Binding AutoAddGameBananaLink}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Looks up game titles online in the background; adds links only for confident matches. Existing GameBanana links are kept." TextWrapping="Wrap"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Add SCSKiller link to suggested PC games" IsChecked="{Binding AutoAddScsKillerLink}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Adds a link that opens the SCSKiller app (the project page if it isn't installed) to known shader-stutter games and Unreal Engine games only. Does not run anything by itself."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Add a Vortex link (opens Vortex)" IsChecked="{Binding AutoAddVortexLink}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Clicking it opens Vortex. Needs Vortex installed."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRowLast}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Add save and config folder links" IsChecked="{Binding AutoAddSaveLinks}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Links to the folders where a game keeps its saves and settings."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </Expander>
+      <!-- Hotkeys -->
+      <Expander IsExpanded="False" Margin="0,0,0,6">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <Path Style="{StaticResource Win11OutlineIcon}" Data="{StaticResource KeyboardIconGeometry}"/>
+            <TextBlock Text="Hotkeys" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Expander.Header>
+<!-- hotkeys-layout:begin -->
+        <StackPanel Margin="0">
+          <Expander IsExpanded="False" Margin="0,0,0,6">
+            <Expander.Header>
+              <TextBlock Text="Keyboard" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+            </Expander.Header>
+            <Border Style="{StaticResource SettingRow}">
+              <StackPanel>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Overlay" VerticalAlignment="Center"/>
+                  <Button x:Name="BtnHotkeyOverlay" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="HotkeyCapture_Click" Tag="Overlay" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Reset" Click="HotkeyReset_Click" Tag="Overlay" Padding="8,3"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Force-close" VerticalAlignment="Center"/>
+                  <Button x:Name="BtnHotkeyForceClose" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="HotkeyCapture_Click" Tag="ForceClose" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Reset" Click="HotkeyReset_Click" Tag="ForceClose" Padding="8,3"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Suspend / Resume" VerticalAlignment="Center"/>
+                  <Button x:Name="BtnHotkeySuspend" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="HotkeyCapture_Click" Tag="Suspend" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Reset" Click="HotkeyReset_Click" Tag="Suspend" Padding="8,3"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Volume up" VerticalAlignment="Center"/>
+                  <Button x:Name="BtnHotkeyVolUp" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="HotkeyCapture_Click" Tag="VolUp" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Reset" Click="HotkeyReset_Click" Tag="VolUp" Padding="8,3"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Volume down" VerticalAlignment="Center"/>
+                  <Button x:Name="BtnHotkeyVolDown" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="HotkeyCapture_Click" Tag="VolDown" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Reset" Click="HotkeyReset_Click" Tag="VolDown" Padding="8,3"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Mute toggle" VerticalAlignment="Center"/>
+                  <Button x:Name="BtnHotkeyVolMute" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="HotkeyCapture_Click" Tag="VolMute" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Reset" Click="HotkeyReset_Click" Tag="VolMute" Padding="8,3"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Game settings window" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                  <Button x:Name="BtnHotkeyGameSettings" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="HotkeyCapture_Click" Tag="GameSettings" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Reset" Click="HotkeyReset_Click" Tag="GameSettings" Padding="8,3"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Global settings" VerticalAlignment="Center"/>
+                  <Button x:Name="BtnHotkeyGlobalSettings" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="HotkeyCapture_Click" Tag="GlobalSettings" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Reset" Click="HotkeyReset_Click" Tag="GlobalSettings" Padding="8,3"/>
+                </Grid>
+                <Border BorderBrush="{StaticResource UiDivider}" BorderThickness="0,1,0,0" Margin="0,4,0,0" Padding="0,8,0,0">
+                  <StackPanel>
+                    <CheckBox Content="PrintScreen screenshot remap" IsChecked="{Binding EnablePrintScreenRemap}" Margin="0"/>
+                    <TextBlock Style="{StaticResource SettingNote}" Text="While a game is focused, PrintScreen presses the key combo below instead. Click the box and press the keys you want, then set that same combo as the screenshot hotkey in AMD Software / GeForce."/>
+                    <Grid Margin="0,8,0,0">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Text="Remap combo" VerticalAlignment="Center"/>
+                      <Button x:Name="BtnPrintScreenRemap" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="HotkeyCapture_Click" Tag="PrintScreenRemap" Padding="8,3" Margin="0,0,6,0" ToolTip="Click, then press the key combo to send instead of PrintScreen"/>
+                      <Button Grid.Column="2" Content="Reset" Click="HotkeyReset_Click" Tag="PrintScreenRemap" Padding="8,3"/>
+                    </Grid>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+            </Border>
+          </Expander>
+          <Expander IsExpanded="False" Margin="0,0,0,6">
+            <Expander.Header>
+              <TextBlock Text="Controller" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+            </Expander.Header>
+            <Border Style="{StaticResource SettingRow}">
+              <StackPanel>
+                <TextBlock Style="{StaticResource SettingNote}" Margin="0,0,0,6" Text="Click a box, then hold the controller buttons you want (e.g. Back + A) and let go. They work while a game is focused. The overlay shortcut is set under Controller. Controller buttons still reach the game too, so pick a combo the game doesn't use."/>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Screenshot" VerticalAlignment="Center"/>
+                  <Button x:Name="BtnPadScreenshot" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="PadCapture_Click" Tag="PadScreenshot" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Clear" Click="PadClear_Click" Tag="PadScreenshot" Padding="8,3"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Suspend" VerticalAlignment="Center"/>
+                  <Button x:Name="BtnPadSuspend" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="PadCapture_Click" Tag="PadSuspend" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Clear" Click="PadClear_Click" Tag="PadSuspend" Padding="8,3"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Mute" VerticalAlignment="Center"/>
+                  <Button x:Name="BtnPadMute" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="PadCapture_Click" Tag="PadMute" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Clear" Click="PadClear_Click" Tag="PadMute" Padding="8,3"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Volume up" VerticalAlignment="Center"/>
+                  <Button x:Name="BtnPadVolUp" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="PadCapture_Click" Tag="PadVolUp" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Clear" Click="PadClear_Click" Tag="PadVolUp" Padding="8,3"/>
+                </Grid>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Volume down" VerticalAlignment="Center"/>
+                  <Button x:Name="BtnPadVolDown" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="PadCapture_Click" Tag="PadVolDown" Padding="8,3" Margin="0,0,6,0"/>
+                  <Button Grid.Column="2" Content="Clear" Click="PadClear_Click" Tag="PadVolDown" Padding="8,3"/>
+                </Grid>
+              </StackPanel>
+            </Border>
+          </Expander>
+        </StackPanel>
+<!-- hotkeys-layout:end -->
+      </Expander>
+      <!-- Playtime -->
+      <Expander IsExpanded="False" Margin="0,0,0,6">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <Path Style="{StaticResource Win11OutlineIcon}" Data="{StaticResource ClockIconGeometry}"/>
+            <TextBlock Text="Playtime" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Expander.Header>
+        <StackPanel Margin="0">
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <CheckBox Content="Subtract suspended and unfocused time" IsChecked="{Binding SubtractSuspendedFromPlaytime}" Margin="0,2,0,4" ToolTip="Removes time the game was paused, parked, or not the focused window (alt-tab, Playnite, browser) from playtime when it closes."/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <CheckBox Content="Exclude short sessions from playtime" IsChecked="{Binding ExcludeShortSessions}" Margin="0,2,0,4"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <Grid Margin="20,0,0,4" IsEnabled="{Binding ExcludeShortSessions}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="180"/>
+                  <ColumnDefinition Width="60"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Shorter than (minutes)" VerticalAlignment="Center"/>
+                <TextBox Grid.Column="1" Text="{Binding MinSessionMinutes, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" Padding="4,2"/>
+              </Grid>
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </Expander>
+      <!-- Panels -->
+      <Expander x:Name="PanelsExpander" IsExpanded="False" Margin="0,0,0,8"
+                Expanded="AppearanceSection_StateChanged" Collapsed="AppearanceSection_StateChanged">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <Path Style="{StaticResource Win11OutlineIcon}" Data="{StaticResource LayersIconGeometry}"/>
+            <TextBlock Text="Panels" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Expander.Header>
+        <StackPanel Margin="0">
+          <Border Style="{StaticResource SettingRow}" IsEnabled="{Binding FpsLimiterInstalled, Mode=OneWay}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="FPS limiter" IsChecked="{Binding ShowFpsLimiterPanel}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Shows the FPS limiter panel in the overlay. Needs the FPS Limiter extension."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Sound panel" IsChecked="{Binding ShowGameVolume}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Shows volume controls, mute, and output device options."/>
+                <Grid Margin="0,7,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Volume control" VerticalAlignment="Center"/>
+                  <ComboBox Grid.Column="1" Width="240" HorizontalAlignment="Left"
+                            SelectedValuePath="Tag"
+                            SelectedValue="{Binding VolumeControlMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                    <ComboBoxItem Content="System volume" Tag="Master"/>
+                    <ComboBoxItem Content="Game audio volume" Tag="PerGame"/>
+                  </ComboBox>
+                </Grid>
+                <TextBlock Style="{StaticResource SettingNote}"
+                           Text="System volume affects all apps; Game audio volume affects only the active game. Volume hotkeys follow this choice; mute stays per-game and output-device selection changes the Windows default."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+        <!-- Appearance (nested in Panels) -->
+        <Expander x:Name="AppearanceExpander" IsExpanded="False" Margin="0,0,0,8"
+                  Expanded="AppearanceSection_StateChanged" Collapsed="AppearanceSection_StateChanged">
+          <Expander.Header>
+            <TextBlock Text="Appearance" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+          </Expander.Header>
+          <StackPanel Margin="0">
+            <Border Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <StackPanel>
+                  <CheckBox Content="Game settings icon in top bar" IsChecked="{Binding ShowTopBarGameSettings}" Margin="0"/>
+                  <TextBlock Style="{StaticResource SettingNote}" Text="Adds a gamepad icon to Playnite's top bar."/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+            <Border Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <Grid Margin="0,0,0,4">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="200"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Achievements preset" VerticalAlignment="Center"/>
+                  <ComboBox Grid.Column="1" SelectedValuePath="Tag" SelectedValue="{Binding AchievementStyle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+                    <ComboBoxItem Content="Desktop" Tag="Desktop"/>
+                    <ComboBoxItem Content="Console" Tag="Console"/>
+                  </ComboBox>
+                </Grid>
+              </DockPanel>
+            </Border>
+            <Expander IsExpanded="False" Margin="0,0,0,8">
+              <Expander.Header>
+                <TextBlock Text="Layout (for exclusive fullscreen games only)" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+              </Expander.Header>
+              <StackPanel Margin="0">
+                <Border Style="{StaticResource SettingRow}">
+                  <DockPanel>
+                    <CheckBox Content="Blurred game background" IsChecked="{Binding UseGameBackgroundBackdrop}" Margin="0,0,0,4"/>
+                  </DockPanel>
+                </Border>
+                <Border Style="{StaticResource SettingRowLast}">
+                  <DockPanel>
+                    <StackPanel Margin="20,0,0,6" IsEnabled="{Binding UseGameBackgroundBackdrop}">
+                      <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="120"/>
+                          <ColumnDefinition Width="200"/>
+                          <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Blur amount" VerticalAlignment="Center"/>
+                        <Slider Style="{StaticResource OverlayFocusSlider}" Grid.Column="1" Minimum="0" Maximum="80" SmallChange="1" LargeChange="5" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding BackdropBlur, Mode=TwoWay}"/>
+                        <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="36" Text="{Binding BackdropBlur, StringFormat={}{0:0}}"/>
+                      </Grid>
+                      <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="120"/>
+                          <ColumnDefinition Width="200"/>
+                          <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Image size" VerticalAlignment="Center" ToolTip="Size of the sharp image (banner) or the zoom of the filled image"/>
+                        <Slider Style="{StaticResource OverlayFocusSlider}" Grid.Column="1" Minimum="50" Maximum="200" SmallChange="1" LargeChange="10" TickFrequency="1" IsSnapToTickEnabled="True" Value="{Binding BackdropImageScale, Mode=TwoWay}"/>
+                        <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="36" Text="{Binding BackdropImageScale, StringFormat={}{0:0}%}"/>
+                      </Grid>
+                      <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="120"/>
+                          <ColumnDefinition Width="200"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Image layout" VerticalAlignment="Center"/>
+                        <ComboBox Grid.Column="1" SelectedValuePath="Tag" SelectedValue="{Binding BackdropImageMode, Mode=TwoWay}">
+                          <ComboBoxItem Content="Auto (recommended)" Tag="Auto"/>
+                          <ComboBoxItem Content="Banner (sharp + blurred fill)" Tag="Banner"/>
+                          <ComboBoxItem Content="Fill screen (crop)" Tag="Fill"/>
+                          <ComboBoxItem Content="Fit whole image" Tag="Fit"/>
+                          <ComboBoxItem Content="Stretch" Tag="Stretch"/>
+                        </ComboBox>
+                      </Grid>
+                      <TextBlock TextWrapping="Wrap" Opacity="0.7" FontSize="11" Text="Wide artwork stays sharp in the middle with a blurred background. The preview uses your last played game."/>
+                    </StackPanel>
+                  </DockPanel>
+                </Border>
+              </StackPanel>
+            </Expander>
+            <StackPanel x:Name="PreviewGroup">
+              <!-- Which panel the live preview shows -->
+              <Border Style="{StaticResource SettingRow}">
+                <DockPanel>
+                  <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="140"/>
+                      <ColumnDefinition Width="200"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Preview panel" VerticalAlignment="Center"/>
+                    <ComboBox x:Name="PreviewPanelCombo" Grid.Column="1" SelectionChanged="PreviewPanelCombo_SelectionChanged">
+                      <ComboBoxItem Content="All" IsSelected="True"/>
+                      <ComboBoxItem Content="Volume"/>
+                      <ComboBoxItem Content="FPS Limiter"/>
+                    </ComboBox>
+                  </Grid>
+                </DockPanel>
+              </Border>
+              <!-- Live preview of the overlay look -->
+              <Border Width="380" Height="580" HorizontalAlignment="Left" CornerRadius="6" ClipToBounds="True" BorderBrush="Transparent" BorderThickness="1" Margin="0,0,0,10">
+              <Grid>
+                <Grid.Background>
+                  <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#FF5B7186" Offset="0"/>
+                    <GradientStop Color="#FF1F2A36" Offset="0.6"/>
+                    <GradientStop Color="#FF0F1319" Offset="1"/>
+                  </LinearGradientBrush>
+                </Grid.Background>
+                <Image x:Name="PreviewBackdropImage" Visibility="Collapsed" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5" IsHitTestVisible="False"/>
+                <Rectangle x:Name="PreviewBackdropScrim" Fill="#73000000" Visibility="Collapsed" IsHitTestVisible="False"/>
+                <Image x:Name="PreviewBackdropBanner" Visibility="Collapsed" Stretch="Uniform" RenderTransformOrigin="0.5,0.5" IsHitTestVisible="False"/>
+                <Rectangle x:Name="PreviewDim" Fill="Black" Opacity="0"/>
+                <StackPanel x:Name="PreviewContentHost" Margin="16,12,16,12" Width="320" HorizontalAlignment="Left" VerticalAlignment="Center">
+                  <!-- Volume / Audio -->
+                  <Border x:Name="PreviewPanel" Width="320" MinWidth="280" Padding="22,14,24,14" Margin="0,0,0,10" Background="#FF1A1D23" CornerRadius="10">
+                    <StackPanel>
+                      <TextBlock Text="VOLUME" FontSize="11" Foreground="#80808080" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                      <Grid Margin="0,0,0,10" Height="34">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="36"/>
+                          <ColumnDefinition Width="58"/>
+                          <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Width="32" Height="32" HorizontalAlignment="Left" VerticalAlignment="Center"
+                                Padding="0" BorderThickness="0" Background="Transparent" IsHitTestVisible="False" Focusable="False">
+                          <Canvas Width="24" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Path Data="M3,9 H7 L12,5 V19 L7,15 H3 Z" Fill="White" Stroke="White" StrokeThickness="1" StrokeLineJoin="Round"/>
+                            <Path Data="M15.2,9.4 C16.8,10.8 16.8,13.2 15.2,14.6 M17.6,6.8 C20.8,9.6 20.8,14.4 17.6,17.2"
+                                  Stroke="White" StrokeThickness="1.7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent"/>
+                          </Canvas>
+                        </Button>
+                        <TextBlock Grid.Column="1" Text="49 %" FontSize="18" FontWeight="Bold" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Border Grid.Column="2" BorderBrush="Transparent" BorderThickness="2" CornerRadius="6"
+                                Margin="6,0,0,0" Padding="0" Height="32" VerticalAlignment="Center">
+                          <Slider x:Name="PreviewVolumeSlider" Minimum="0" Maximum="1" Value="0.49" Height="28"
+                                  LargeChange="0.05" SmallChange="0.01" Style="{StaticResource OverlayFocusSlider}"
+                                  IsHitTestVisible="False" Focusable="False"/>
+                        </Border>
+                      </Grid>
+                      <TextBlock Text="OUTPUT DEVICE" FontSize="11" Foreground="#80808080" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                      <StackPanel Height="72" Margin="0,0,0,6">
+                        <Border x:Name="PreviewListItem" MinHeight="32" Margin="1" Padding="8,5" CornerRadius="4" Background="#FF2A2D35">
+                          <TextBlock Text="Speakers (Realtek Audio)" FontSize="12" Foreground="White" VerticalAlignment="Center"/>
+                        </Border>
+                        <Border MinHeight="32" Margin="1" Padding="8,5" CornerRadius="4" Background="Transparent">
+                          <TextBlock Text="NVIDIA High Definition Audio" FontSize="12" Foreground="White" VerticalAlignment="Center"/>
+                        </Border>
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                  <!-- FPS Limiter -->
+                  <Border x:Name="PreviewFpsPanel" Width="320" MinWidth="280" Padding="16,14" Margin="0,0,0,10" Background="#FF1A1D23" CornerRadius="10" Visibility="Collapsed">
+                    <StackPanel>
+                      <Grid Margin="0,0,0,8">
+                        <TextBlock Text="FPS LIMITER" FontSize="11" Foreground="#80808080" FontWeight="SemiBold"/>
+                      </Grid>
+                      <Grid Margin="0,0,0,8" Height="28">
+                        <TextBlock Text="144 FPS" FontSize="18" FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                      </Grid>
+                      <TextBlock Text="PRESETS" FontSize="11" Foreground="#80808080" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                      <WrapPanel Margin="0,0,0,8">
+                        <Border x:Name="PreviewFpsPresetFocused" MinWidth="56" Height="30" Padding="10,6" Margin="0,0,6,6"
+                                CornerRadius="6" BorderThickness="1" Background="#FF2A2D35">
+                          <TextBlock x:Name="PreviewFpsPresetText" Text="60" FontSize="12" FontWeight="SemiBold" Foreground="White"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <Border MinWidth="56" Height="30" Padding="10,6" Margin="0,0,6,6" CornerRadius="6" BorderThickness="1"
+                                BorderBrush="Transparent" Background="{DynamicResource PreviewSurfaceBrush}">
+                          <TextBlock Text="120" FontSize="12" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <Border MinWidth="56" Height="30" Padding="10,6" Margin="0,0,6,6" CornerRadius="6" BorderThickness="1"
+                                BorderBrush="Transparent" Background="{DynamicResource PreviewSurfaceBrush}">
+                          <TextBlock Text="144" FontSize="12" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                      </WrapPanel>
+                      <Border x:Name="PreviewFpsDisable" Height="32" Margin="0,0,0,8" Padding="8,4" CornerRadius="6"
+                              BorderThickness="1" Background="#FF3A2020" HorizontalAlignment="Stretch">
+                        <TextBlock x:Name="PreviewFpsDisableText" Text="Disable FPS cap" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                      </Border>
+                      <StackPanel>
+                        <TextBlock Text="SYNC MODE" FontSize="11" Foreground="#80808080" FontWeight="SemiBold" Margin="0,4,0,6"/>
+                        <TextBlock Text="Async" FontSize="13" Foreground="White" Margin="0,0,0,6" TextTrimming="CharacterEllipsis"/>
+                        <WrapPanel Margin="0,0,0,8">
+                          <Border Width="90" Padding="4,6" Margin="0,0,4,6" CornerRadius="6" BorderThickness="1"
+                                  BorderBrush="Transparent" Background="{DynamicResource PreviewSurfaceBrush}">
+                            <TextBlock Text="Async" FontSize="12" Foreground="White" HorizontalAlignment="Center"/>
+                          </Border>
+                          <Border Width="90" Padding="4,6" Margin="0,0,4,6" CornerRadius="6" BorderThickness="1"
+                                  BorderBrush="Transparent" Background="{DynamicResource PreviewSurfaceBrush}">
+                            <TextBlock Text="Front Edge" FontSize="12" Foreground="White" HorizontalAlignment="Center"/>
+                          </Border>
+                          <Border Width="90" Padding="4,6" Margin="0,0,4,6" CornerRadius="6" BorderThickness="1"
+                                  BorderBrush="Transparent" Background="{DynamicResource PreviewSurfaceBrush}">
+                            <TextBlock Text="Back Edge" FontSize="12" Foreground="White" HorizontalAlignment="Center"/>
+                          </Border>
+                          <Border Width="90" Padding="4,6" Margin="0,0,4,6" CornerRadius="6" BorderThickness="1"
+                                  BorderBrush="Transparent" Background="{DynamicResource PreviewSurfaceBrush}">
+                            <TextBlock Text="Reflex" FontSize="12" Foreground="White" HorizontalAlignment="Center"/>
+                          </Border>
+                        </WrapPanel>
+                      </StackPanel>
+                      <Border Height="32" Padding="10,8" CornerRadius="6" BorderThickness="1" BorderBrush="Transparent"
+                              Background="{DynamicResource PreviewSurfaceBrush}">
+                        <TextBlock Text="Toggle Reflex Markers" FontSize="13" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                      </Border>
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+              </Grid>
+              </Border>
+            </StackPanel>
+            <Border Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <StackPanel>
+                  <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="140"/>
+                      <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Overlay preset" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Column="1" x:Name="ThemePresetCombo" MinWidth="220" HorizontalAlignment="Left" SelectionChanged="ThemePresetCombo_SelectionChanged">
+                      <ComboBoxItem Content="Steam (default)"/>
+                      <ComboBoxItem Content="Steam Dark"/>
+                      <ComboBoxItem Content="Windows 11"/>
+                      <ComboBoxItem Content="Dynamic (cover accent)"/>
+                      <ComboBoxItem Content="Custom"/>
+                    </ComboBox>
+                  </Grid>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+            <!-- Save/delete appearance presets: save the current look under a name; saved presets appear in the Overlay preset list -->
+            <Border x:Name="SavePresetPanel" Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <StackPanel>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="140"/>
+                      <ColumnDefinition Width="190"/>
+                      <ColumnDefinition Width="Auto"/>
+                      <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="Save current as" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" x:Name="AppearancePresetNameBox" MaxLength="40" MinWidth="150" Padding="7,4" VerticalContentAlignment="Center" ToolTip="Enter a name for this appearance preset"/>
+                    <Button Grid.Column="2" Content="Save preset" Margin="6,0,0,0" Padding="10,4" Click="SaveAppearancePreset_Click"/>
+                    <Button Grid.Column="3" x:Name="DeleteAppearancePresetButton" Content="Delete selected" Margin="6,0,0,0" Padding="10,4" Click="DeleteAppearancePreset_Click" IsEnabled="False"/>
+                  </Grid>
+                  <TextBlock Style="{StaticResource SettingNote}" Text="Save a named copy of the current appearance. Save again with the same name to replace it." Margin="140,5,0,0"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+            <Border Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <Grid Margin="0,0,0,6">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Accent color" VerticalAlignment="Center"/>
+                  <local:ColorPickerButton Grid.Column="1" ColorHex="{Binding AccentColor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                </Grid>
+              </DockPanel>
+            </Border>
+            <Border Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <Grid Margin="0,0,0,6">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Panel color" VerticalAlignment="Center"/>
+                  <local:ColorPickerButton Grid.Column="1" ColorHex="{Binding PanelBackgroundColor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                </Grid>
+              </DockPanel>
+            </Border>
+            <Border Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <Grid Margin="0,0,0,6">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Panel opacity" VerticalAlignment="Center"/>
+                  <Slider Style="{StaticResource OverlayFocusSlider}" Grid.Column="1" Minimum="0.3" Maximum="1" SmallChange="0.05" LargeChange="0.1" Value="{Binding PanelOpacity, Mode=TwoWay}"/>
+                  <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="36" Text="{Binding PanelOpacity, StringFormat={}{0:P0}}"/>
+                </Grid>
+              </DockPanel>
+            </Border>
+            <Border Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <Grid Margin="0,0,0,6">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Corner radius" VerticalAlignment="Center"/>
+                  <Slider Style="{StaticResource OverlayFocusSlider}" Grid.Column="1" Minimum="0" Maximum="28" TickFrequency="1" IsSnapToTickEnabled="True" SmallChange="1" LargeChange="4" Value="{Binding PanelCornerRadius, Mode=TwoWay}"/>
+                  <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="36" Text="{Binding PanelCornerRadius, StringFormat={}{0:0} px}"/>
+                </Grid>
+              </DockPanel>
+            </Border>
+            <Border Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <CheckBox Content="Glass effect for panels (light border, translucent buttons)" IsChecked="{Binding PanelGlassBorder}" Margin="0,2,0,6"/>
+              </DockPanel>
+            </Border>
+            <Border Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <Grid Margin="0,0,0,6">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Glass strength" VerticalAlignment="Center"/>
+                  <Slider Style="{StaticResource OverlayFocusSlider}" Grid.Column="1" Minimum="0" Maximum="1" SmallChange="0.05" LargeChange="0.1"
+                          Value="{Binding PanelGlassStrength, Mode=TwoWay}" IsEnabled="{Binding PanelGlassBorder}"
+                          ToolTip="Adjust the tint, sheen, border, and translucent surfaces of overlay panels."/>
+                  <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="36"
+                             Text="{Binding PanelGlassStrength, StringFormat={}{0:P0}}" IsEnabled="{Binding PanelGlassBorder}"/>
+                </Grid>
+              </DockPanel>
+            </Border>
+            <Border Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <Grid Margin="0,0,0,8">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Dim game behind overlay" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                  <Slider Style="{StaticResource OverlayFocusSlider}" Grid.Column="1" Minimum="0" Maximum="0.85" SmallChange="0.05" LargeChange="0.1" Value="{Binding BackdropDim, Mode=TwoWay}"/>
+                  <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" MinWidth="36" Text="{Binding BackdropDim, StringFormat={}{0:P0}}"/>
+                </Grid>
+              </DockPanel>
+            </Border>
+            <Border Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <Button Content="Reset panel positions" HorizontalAlignment="Left" Padding="10,4" Margin="0,0,0,6" Click="ResetPanelLayout_Click" ToolTip="Restore the default panel positions"/>
+              </DockPanel>
+            </Border>
+            <Border Style="{StaticResource SettingRow}">
+              <DockPanel>
+                <Button Content="Reset appearance" HorizontalAlignment="Left" Padding="10,3" Click="AppearanceReset_Click"/>
+              </DockPanel>
+            </Border>
+          </StackPanel>
+        </Expander>
+        </StackPanel>
+      </Expander>
+      <!-- Buttons -->
+      <Expander IsExpanded="False" Margin="0,0,0,6">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <Path Style="{StaticResource Win11OutlineIcon}" Data="{StaticResource SlidersIconGeometry}"/>
+            <TextBlock Text="Buttons" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Expander.Header>
+        <StackPanel Margin="0">
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Suspend button" IsChecked="{Binding EnableSuspendMinimize}" Margin="0"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <CheckBox Content="Show Playnite" IsChecked="{Binding ShowPlayniteButton}" Margin="0,2,0,2"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <CheckBox Content="Discord" IsChecked="{Binding ShowDiscord}" Margin="0,2,0,2"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <CheckBox Content="Battery" IsChecked="{Binding ShowBattery}" Margin="0,2,0,2"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <CheckBox Content="Steam Friends" IsChecked="{Binding ShowSteamFriendsButton}" Margin="0,2,0,8"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <CheckBox Content="Record gameplay" IsChecked="{Binding ShowRecordGameplay}" Margin="0,2,0,2"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <TextBox Text="{Binding RecordGameplayShortcut}" Margin="16,0,0,8" ToolTip="Shortcut / path"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <CheckBox Content="Record recent" IsChecked="{Binding ShowRecordRecent}" Margin="0,2,0,2"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <TextBox Text="{Binding RecordRecentShortcut}" Margin="16,0,0,8" ToolTip="Shortcut / path"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <CheckBox Content="Streaming" IsChecked="{Binding ShowStreaming}" Margin="0,2,0,2"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <TextBox Text="{Binding StreamingShortcut}" Margin="16,0,0,8" ToolTip="Shortcut / path"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <CheckBox Content="Performance overlay" IsChecked="{Binding ShowPerformanceOverlay}" Margin="0,2,0,2"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <TextBox Text="{Binding PerformanceOverlayShortcut}" Margin="16,0,0,8" ToolTip="Shortcut / path"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <CheckBox Content="Screenshot gallery" IsChecked="{Binding ShowScreenshotGallery}" Margin="0,2,0,2"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <TextBox Text="{Binding ScreenshotGalleryPath}" Margin="16,0,0,8" ToolTip="Directory"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <CheckBox Content="Web browser" IsChecked="{Binding ShowWebBrowser}" Margin="0,2,0,2"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <TextBox Text="{Binding WebBrowserPath}" Margin="16,0,0,4" ToolTip="Browser path"/>
+            </DockPanel>
+          </Border>
+          <!-- Local Games Store -->
+        </StackPanel>
+      </Expander>
+
+      <Expander IsExpanded="False" Margin="0,0,0,8">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <Path Style="{StaticResource Win11OutlineIcon}" Data="{StaticResource FolderIconGeometry}"/>
+            <TextBlock Text="Metadata" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Expander.Header>
+        <StackPanel Margin="0">
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Download metadata automatically for custom games" IsChecked="{Binding AutoDownloadMetadataForCustomGames}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="When you add a game by hand, cover, description, genres and more are downloaded right away, like for storefront games. Existing values are never overwritten."/>
+                <CheckBox Content="Show progress while downloading metadata and achievements" IsChecked="{Binding ShowMetadataDownloadProgress}" Margin="16,6,0,0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Margin="16,2,0,0" Text="Shows Playnite's progress dialog for metadata and achievement downloads, including local games folder scans."/>
+                <CheckBox Content="Download achievements for new custom games" IsChecked="{Binding LocalStoreDownloadAchievements}" Margin="0,10,0,0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Asks the Playnite Achievements extension to fetch achievements for new PC games (found by the local games folder scan or added by hand) once their name, metadata and links are set."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Enable metadata for local games" IsChecked="{Binding LocalStoreEnabled}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Pick a folder with games that do not come from an online storefront. Every game folder is checked for its main .exe, added to Playnite and given metadata."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}" IsEnabled="{Binding LocalStoreEnabled}">
+            <DockPanel>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Text="{Binding LocalGamesFolder, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" ToolTip="Folder that contains your local games"/>
+                <Button Grid.Column="1" Content="Browse…" Padding="10,4" Click="LocalStoreBrowse_Click"/>
+              </Grid>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}" IsEnabled="{Binding LocalStoreEnabled}">
+            <DockPanel>
+              <CheckBox Content="Download metadata for games found in this folder" IsChecked="{Binding LocalStoreDownloadMetadata}" Margin="0,2,0,4"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}" IsEnabled="{Binding LocalStoreEnabled}">
+            <DockPanel>
+              <CheckBox Content="Scan automatically when Playnite starts" IsChecked="{Binding LocalStoreScanOnStartup}" Margin="0,2,0,4"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}" IsEnabled="{Binding LocalStoreEnabled}">
+            <DockPanel>
+              <CheckBox Content="Scan when Playnite refreshes libraries (F5)" IsChecked="{Binding LocalStoreScanOnLibraryUpdate}" Margin="0,2,0,4"/>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}" IsEnabled="{Binding LocalStoreEnabled}">
+            <DockPanel>
+              <Grid Style="{StaticResource HotkeyRow}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="140"/>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Manual scan hotkey" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                <Button x:Name="BtnHotkeyScanLocal" Grid.Column="1" MinWidth="160" HorizontalAlignment="Left" Click="HotkeyCapture_Click" Tag="ScanLocal" Padding="8,4" Margin="0,0,6,0"/>
+                <Button Grid.Column="2" Content="Clear" Click="HotkeyReset_Click" Tag="ScanLocal" Padding="8,4"/>
+              </Grid>
+            </DockPanel>
+          </Border>
+          <Border Style="{StaticResource SettingRow}" IsEnabled="{Binding LocalStoreEnabled}">
+            <DockPanel>
+              <StackPanel Orientation="Horizontal">
+                <Button Content="Scan now" Padding="10,4" Margin="0,0,8,0" Click="LocalStoreScanNow_Click"/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </Expander>
+      <!-- Advanced -->
+      <Expander IsExpanded="False" Margin="0,0,0,8">
+        <Expander.Header>
+          <StackPanel Orientation="Horizontal">
+            <Path Style="{StaticResource Win11OutlineIcon}" Data="{StaticResource ShieldIconGeometry}"/>
+            <TextBlock Text="Advanced" FontWeight="Normal" FontSize="{DynamicResource FontSizeLarge}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </Expander.Header>
+        <StackPanel Margin="0">
+          <Border Style="{StaticResource SettingRowLast}">
+            <DockPanel>
+              <StackPanel>
+                <CheckBox Content="Save activity log" IsChecked="{Binding EnableBreadcrumbLog}" Margin="0"/>
+                <TextBlock Style="{StaticResource SettingNote}" Text="Keeps a short log of what the overlay does. Helpful if Playnite crashes."/>
+              </StackPanel>
+            </DockPanel>
+          </Border>
+        </StackPanel>
+      </Expander>
+    </StackPanel>
+  </ScrollViewer>
+    <Border x:Name="PreviewDockFrame" Grid.Column="1" Visibility="Collapsed"
+            Background="{DynamicResource ReShadeBg}" BorderBrush="{DynamicResource UiDivider}"
+            BorderThickness="1,0,0,0" Padding="8,12,8,12">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel>
+          <TextBlock Text="LIVE PREVIEW" FontSize="11" FontWeight="SemiBold"
+                     Foreground="{DynamicResource ReShadeTextMuted}" Margin="6,0,0,8"/>
+          <StackPanel x:Name="PreviewDockHost"/>
+        </StackPanel>
+      </ScrollViewer>
+    </Border>
+  </Grid>
 </UserControl>

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -6,18 +6,60 @@ public class GlobalKeyboardHook : IDisposable
 {
     private LowLevelKeyboardProc _proc;
     private IntPtr _hookID = IntPtr.Zero;
+    private readonly object _sync = new object();
+    private bool _disposed;
 
-    public event Action<Keys, bool> KeyPressed;
+    /// <summary>
+    /// Fired on key down. Return true to consume the key (prevent further processing), false to pass it on.
+    /// Must return quickly — Windows silently drops WH_KEYBOARD_LL hooks that take too long.
+    /// </summary>
+    public event Func<Keys, bool, bool> KeyPressed;
 
     public GlobalKeyboardHook()
     {
         _proc = HookCallback;
-        _hookID = SetHook(_proc);
+        InstallHook();
     }
 
     public void Dispose()
     {
-        UnhookWindowsHookEx(_hookID);
+        lock (_sync)
+        {
+            _disposed = true;
+            RemoveHook();
+        }
+    }
+
+    /// <summary>
+    /// Re-install the low-level hook. Call after sleep/hibernate or if hotkeys stop responding
+    /// (Windows can silently remove WH_KEYBOARD_LL hooks after timeout or power transitions).
+    /// </summary>
+    public void Reinstall()
+    {
+        lock (_sync)
+        {
+            if (_disposed) return;
+            RemoveHook();
+            InstallHook();
+        }
+    }
+
+    public bool IsHooked
+    {
+        get { lock (_sync) return _hookID != IntPtr.Zero; }
+    }
+
+    private void InstallHook()
+    {
+        if (_hookID != IntPtr.Zero) return;
+        _hookID = SetHook(_proc);
+    }
+
+    private void RemoveHook()
+    {
+        if (_hookID == IntPtr.Zero) return;
+        try { UnhookWindowsHookEx(_hookID); } catch { }
+        _hookID = IntPtr.Zero;
     }
 
     private IntPtr SetHook(LowLevelKeyboardProc proc)
@@ -34,9 +76,27 @@ public class GlobalKeyboardHook : IDisposable
         if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
         {
             int vkCode = Marshal.ReadInt32(lParam);
-            bool altPressed = (Control.ModifierKeys & Keys.Alt) == Keys.Alt;
+            // GetAsyncKeyState, not Control.ModifierKeys: GetKeyState is per-thread and goes stale
+            // when Playnite is not the foreground app (e.g. an exclusive-fullscreen game just
+            // stepped aside), which made Alt+` unable to close the overlay.
+            bool altPressed = (GetAsyncKeyState(0x12 /* VK_MENU */) & 0x8000) != 0 ||
+                              (Control.ModifierKeys & Keys.Alt) == Keys.Alt;
 
-            KeyPressed?.Invoke((Keys)vkCode, altPressed);
+            bool handled = false;
+            try
+            {
+                handled = KeyPressed?.Invoke((Keys)vkCode, altPressed) ?? false;
+            }
+            catch
+            {
+                // Never let exceptions escape the hook — Windows will remove it
+            }
+
+            if (handled)
+            {
+                // Consume the key so the target application never receives it
+                return (IntPtr)1;
+            }
         }
 
         return CallNextHookEx(_hookID, nCode, wParam, lParam);
@@ -45,6 +105,9 @@ public class GlobalKeyboardHook : IDisposable
     private const int WH_KEYBOARD_LL = 13;
     private const int WM_KEYDOWN = 0x0100;
     private const int WM_SYSKEYDOWN = 0x0104;
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
 
     private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -12,6 +12,8 @@
     <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
+    <!-- Required by SDL2.cs, including WPF temporary markup compilation. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -30,6 +32,7 @@
     <DefineConstants>TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup>
     <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
@@ -128,6 +131,7 @@
     <Reference Include="System.Management" />
     <Reference Include="System.Memory, Version=4.0.1.2, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>packages\System.Memory.4.5.5\lib\net461\System.Memory.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="System.Net" />
     <Reference Include="System.Numerics" />
@@ -231,6 +235,11 @@
     <Compile Include="GameStateManager.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="GlobalKeyboardHook.cs" />
+    <Compile Include="SteamInstantPlay.cs" />
+    <Compile Include="CompleteUninstall.cs" />
+    <Compile Include="OverlayTheme.cs" />
+    <Compile Include="AppearancePalette.cs" />
+    <Compile Include="ColorPickerButton.cs" />
     <Compile Include="OverlaySettingsView.xaml.cs">
       <DependentUpon>OverlaySettingsView.xaml</DependentUpon>
     </Compile>
@@ -239,20 +248,38 @@
     </Compile>
     <Compile Include="OverlayWindowViewModel.cs" />
     <Compile Include="PlayniteGameOverlay.cs" />
+    <Compile Include="OverlayAssemblyResolver.cs" />
+    <Compile Include="PlayniteAchievementsSqliteReader.cs" />
+    <Compile Include="LocalGamesStore.cs" />
+    <Compile Include="RecompLocations.cs" />
+    <Compile Include="EmulatorLocations.cs" />
+    <Compile Include="InstallSizeFiller.cs" />
+    <Compile Include="OverlayRtssController.cs" />
+    <Compile Include="WgcRegistrar.cs" />
+    <Compile Include="OverlayGameMode.cs" />
+    <Compile Include="FpsLimiterSettingsSync.cs" />
+    <Compile Include="FpsLimiterBridge.cs" />
+    <Compile Include="GameAudioSession.cs" />
+    <Compile Include="SmoothSlider.cs" />
+    <Compile Include="MasterVolumeProfiles.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Battery.xaml.cs">
       <DependentUpon>Battery.xaml</DependentUpon>
     </Compile>
     <Compile Include="Properties\SDL2.cs" />
     <Compile Include="WindowHelper.cs" />
+    <Compile Include="XInputPoller.cs" />
+    <Compile Include="ControllerHotkeys.cs" />
+    <Compile Include="HotkeysLayout.cs" />
+    <Compile Include="SonyHidGuidePoller.cs" />
+    <Compile Include="DesktopControllerNav.cs" />
+    <Compile Include="CursorAutoHide.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
     <None Include="extension.yaml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="installer-manifest.yaml" />
-    <None Include="jonosellier_PlayniteGameOverlay.yaml" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
@@ -262,6 +289,10 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <Page Include="App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="ExtensionTheme.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
@@ -284,8 +315,10 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Content Include="917bd40b-a43c-439f-848c-2f82b49d8590.jpg" />
     <Resource Include="assets\discord.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Resource>
+    <Resource Include="assets\friends.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Resource>
     <Resource Include="assets\performance.png">
@@ -304,6 +337,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Resource>
     <Resource Include="assets\record.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Resource>
+    <Resource Include="assets\instant-play-sonic.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Resource>
   </ItemGroup>
@@ -327,4 +363,15 @@
     <PreBuildEvent>
     </PreBuildEvent>
   </PropertyGroup>
+  <ItemGroup>
+    <OverlayRequiredRuntime Include="Microsoft.Bcl.AsyncInterfaces.dll;System.Buffers.dll;System.Memory.dll;System.Numerics.Vectors.dll;System.Runtime.CompilerServices.Unsafe.dll;System.Text.Encodings.Web.dll;System.Text.Json.dll;System.Threading.Tasks.Extensions.dll" />
+  </ItemGroup>
+  <Target Name="EnsureOverlayRuntimeDependencies" AfterTargets="Build">
+    <ItemGroup>
+      <OverlayRuntimeDependency Include="$(MSBuildProjectDirectory)\BundledRuntime\*.dll" />
+    </ItemGroup>
+    <Error Condition="'@(OverlayRuntimeDependency)' == ''" Text="No BundledRuntime assemblies found." />
+    <Copy SourceFiles="@(OverlayRuntimeDependency)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    <Error Condition="!Exists('$(TargetDir)%(OverlayRequiredRuntime.Identity)')" Text="Missing runtime dependency in build output: %(OverlayRequiredRuntime.Identity)" />
+  </Target>
 </Project>

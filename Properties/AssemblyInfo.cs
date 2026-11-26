@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("PlayniteGameOverlay")]
+[assembly: AssemblyTitle("Playnite Overlay 3000")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("PlayniteGameOverlay")]
-[assembly: AssemblyCopyright("Copyright ©  2019")]
+[assembly: AssemblyCompany("pahan3000")]
+[assembly: AssemblyProduct("Playnite Overlay 3000")]
+[assembly: AssemblyCopyright("Copyright © 2025 Jonathan Sellier, © 2026 pahan3000")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

@@ -46,49 +46,93 @@ namespace PlayniteGameOverlay
 
         public async void CloseGame(GameOverlayData gameData, CloseBehavior behavior = CloseBehavior.CloseAndEnd)
         {
-            if (gameData != null)
+            if (gameData == null)
+                return;
+
+            // Always unfreeze first. CloseMainWindow on an NtSuspended process
+            // never returns and freezes Playnite's UI thread. Resuming then
+            // immediately killing a DX12/UE5 process often causes "GPU Crash dump".
+            try { WindowHelper.SoftResumeFromOverlay(); } catch { }
+            try { WindowHelper.ForceClearAllSuspendState(); } catch { }
+            // Settle so the GPU/driver can leave the suspended frame cleanly
+            try { await Task.Delay(350); } catch { }
+
+            var proc = FindProcessById(gameData.ProcessId);
+            if (proc == null)
+                return;
+
+            try
             {
-                var proc = FindProcessById(gameData.ProcessId);
-                if (proc == null)
+                if (proc.HasExited)
                 {
+                    try { proc.Close(); } catch { }
                     return;
                 }
 
-                var success = proc.CloseMainWindow();
+                // Prefer a graceful WM_CLOSE so the engine can tear down the GPU device.
+                // Hard Kill is a last resort — it commonly triggers GPU crash reporters
+                // (UE5 "GPU Crash dump Triggered") after NtSuspend/Resume.
+                bool success = false;
+                try
+                {
+                    var closeTask = Task.Run(() =>
+                    {
+                        try { return proc.CloseMainWindow(); }
+                        catch { return false; }
+                    });
+                    var completed = await Task.WhenAny(closeTask, Task.Delay(2500));
+                    if (completed == closeTask)
+                        success = closeTask.Result;
+                    else
+                        _logger.Log($"CloseMainWindow timed out for PID {gameData.ProcessId}.", "WARNING");
+                }
+                catch (Exception ex)
+                {
+                    _logger.Log($"CloseMainWindow failed: {ex.Message}", "WARNING");
+                }
+
                 switch (behavior)
                 {
                     case CloseBehavior.CloseAndEnd:
-                        if (!success)
+                        // Wait longer for a graceful exit before Kill
+                        for (int i = 0; i < 50 && !proc.HasExited; i++)
                         {
-                            proc.Kill(); // Forcefully kill the process if closing the main window fails
-                        }
-                        for (int i = 0; i < 30 && !proc.HasExited; i++)
-                        {
-                            await Task.Delay(100); // Wait for up to 3 seconds for the process to exit gracefully
+                            await Task.Delay(100);
                         }
                         if (!proc.HasExited)
                         {
-                            _logger.Log($"Process {proc.ProcessName} did not exit gracefully after 3 seconds, killing it forcefully.", "WARNING");
-                            proc.Kill(); // Forcefully kill the process if it hasn't exited
+                            _logger.Log($"Process {proc.ProcessName} still running after graceful close — kill as last resort.", "WARNING");
+                            try { proc.Kill(); } catch { }
+                            try { await Task.Delay(200); } catch { }
                         }
-                        proc.Close();
+                        try { proc.Close(); } catch { }
                         break;
                     case CloseBehavior.CloseWindow:
-                        if (!success)
+                        if (!success && !proc.HasExited)
                         {
-                            proc.Kill(); // Forcefully kill the process if closing the main window fails
+                            for (int i = 0; i < 20 && !proc.HasExited; i++)
+                                await Task.Delay(100);
+                            if (!proc.HasExited)
+                            {
+                                try { proc.Kill(); } catch { }
+                            }
                         }
-                        proc.Close();
+                        try { proc.Close(); } catch { }
                         break;
                     case CloseBehavior.EndTask:
-                        proc.Kill(); // Forcefully kill the process regardless
-                        proc.Close();
+                        // Still resume+settle above; Kill is intentional for this behavior
+                        try { if (!proc.HasExited) proc.Kill(); } catch { }
+                        try { proc.Close(); } catch { }
                         break;
                     default:
                         _logger.Log($"Unknown close behavior: {behavior}", "ERROR");
                         break;
                 }
-
+            }
+            catch (Exception ex)
+            {
+                _logger.Log($"CloseGame failed: {ex.Message}", "ERROR");
+                try { if (proc != null && !proc.HasExited) proc.Kill(); } catch { }
             }
         }
 

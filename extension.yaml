@@ -1,7 +1,7 @@
 ﻿Id: PlayniteGameOverlay_fc75626e-ec69-4287-972a-b86298555ebb
-Name: Playnite Overlay
-Author: jonosellier
-Version: 0.4.5
+Name: Playnite Overlay 3000
+Author: pahan3000
+Version: 1.0.0
 Module: PlayniteGameOverlay.dll
 Type: GenericPlugin
 Icon: icon.png
