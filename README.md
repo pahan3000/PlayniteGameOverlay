@@ -4,7 +4,6 @@ An in-game overlay for [Playnite](https://playnite.link), usable with keyboard o
 
 It also adds a set of quality-of-life tools to Playnite itself: faster game launching, automatic metadata and links, save-folder shortcuts, controller navigation, and a cleaner uninstall.
 
-> Windows only. Built against Playnite SDK 6.12 (.NET Framework 4.6.2).
 
 ---
 
@@ -142,9 +141,6 @@ See [BUILD_AND_PACKAGE.md](BUILD_AND_PACKAGE.md). In short: install Visual Studi
 
 ## Credits
 
-**Authors**
-
-- **[pahan3000](https://github.com/pahan3000)**: maintainer, and author of the features added in this fork.
 - **Jonathan Sellier ([jonosellier](https://github.com/jonosellier))**: original author of [PlayniteGameOverlay](https://github.com/jonosellier/PlayniteGameOverlay), which this project is forked from.
 
 **Ideas and inspiration**
