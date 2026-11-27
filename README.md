@@ -4,7 +4,7 @@ An in-game overlay for [Playnite](https://playnite.link), usable with keyboard o
 
 It also adds a set of quality-of-life tools to Playnite itself: faster game launching, automatic metadata and links, save-folder shortcuts, controller navigation, and a cleaner uninstall.
 
-**MADE WITH AI**
+**MADE WITH AI. Low effort piece of rubbish.**
 
 ---
 
