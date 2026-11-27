@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -199,7 +200,44 @@ namespace PlayniteGameOverlay
             }
         }
 
-        public static void Up()
+        /// <summary>One trace line per library pad action: how long it took and what state it left (selection count, mode).</summary>
+        private static void Traced(string name, Action core)
+        {
+            if (!Breadcrumb.Enabled) { core(); return; }
+            long t0 = Stopwatch.GetTimestamp();
+            try { core(); }
+            finally
+            {
+                try
+                {
+                    double ms = (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
+                    Breadcrumb.Write("Nav " + name + " " + ms.ToString("0.0") + "ms" + (ms > 40 ? " SLOW" : "") + " " + LibraryState());
+                }
+                catch { }
+            }
+        }
+
+        private static string LibraryState()
+        {
+            string sel = "?", name = "-";
+            try
+            {
+                var games = _api?.MainView?.SelectedGames;
+                int n = games != null ? games.Count() : 0;
+                sel = n.ToString();
+                var first = games != null ? games.FirstOrDefault() : null;
+                if (first != null) name = first.Name;
+                int rows = _navList != null ? _navList.SelectedItems.Count : -1;
+                if (rows != n) sel += "/rows" + rows;      // model and list disagree
+            }
+            catch { }
+            bool grid = false; try { grid = IsGridView(); } catch { }
+            return "sel=" + sel + " game=\"" + name + "\" grid=" + grid + " headerMode=" + _groupHeaderMode + " topBar=" + _topBarMode;
+        }
+
+        public static void Up() { Traced("Up", UpCore); }
+
+        private static void UpCore()
         {
             PadInput.NotePad();
             if (MenuMove(-1)) return;
@@ -218,7 +256,9 @@ namespace PlayniteGameOverlay
             MoveSelection(-1, vertical: true);
         }
 
-        public static void Down()
+        public static void Down() { Traced("Down", DownCore); }
+
+        private static void DownCore()
         {
             PadInput.NotePad();
             if (MenuMove(1)) return;
@@ -237,7 +277,9 @@ namespace PlayniteGameOverlay
             MoveSelection(1, vertical: true);
         }
 
-        public static void Left()
+        public static void Left() { Traced("Left", LeftCore); }
+
+        private static void LeftCore()
         {
             PadInput.NotePad();
             if (MenuLeft()) return;
@@ -269,7 +311,9 @@ namespace PlayniteGameOverlay
             }
         }
 
-        public static void Right()
+        public static void Right() { Traced("Right", RightCore); }
+
+        private static void RightCore()
         {
             PadInput.NotePad();
             if (MenuRight()) return;
@@ -304,7 +348,9 @@ namespace PlayniteGameOverlay
         /// Square: collapse the selected game's group (and park on its header), or - when that group is already
         /// collapsed - expand it and step into its first game.
         /// </summary>
-        public static void ToggleGroup()
+        public static void ToggleGroup() { Traced("ToggleGroup", ToggleGroupCore); }
+
+        private static void ToggleGroupCore()
         {
             PadInput.NotePad();
             if (ResolveOpenMenu() != null) return;
@@ -353,7 +399,9 @@ namespace PlayniteGameOverlay
             }
         }
 
-        public static void Confirm()
+        public static void Confirm() { Traced("Confirm", ConfirmCore); }
+
+        private static void ConfirmCore()
         {
             PadInput.NotePad();
             if (MenuConfirm()) return;
@@ -377,10 +425,18 @@ namespace PlayniteGameOverlay
                 if (_api?.MainView == null) return;
                 var game = _api.MainView.SelectedGames?.FirstOrDefault();
                 if (game == null) return;
-                if (game.IsInstalled)
-                    _api.StartGame(game.Id);
-                else
-                    _api.InstallGame(game.Id);
+                // StartGame / InstallGame can open a modal dialog (e.g. Playnite's "Select action" picker when a game has
+                // several play actions) and do not return until it is closed. Called straight from the pad poll tick that
+                // blocked the poller for the whole time the dialog was open, so the pad was dead inside it
+                // (breadcrumbs: "Nav Confirm 156776 ms SLOW" + "PadPoll: slow tick"). Run it after the tick has returned.
+                var gameId = game.Id;
+                bool installed = game.IsInstalled;
+                var api = _api;
+                Defer(() =>
+                {
+                    if (installed) api.StartGame(gameId);
+                    else api.InstallGame(gameId);
+                });
             }
             catch { }
         }
@@ -389,7 +445,9 @@ namespace PlayniteGameOverlay
         /// B: closes the context menu (or its submenu) when one is open, otherwise opens the
         /// context menu of the selected game. In group-header mode B still leaves header mode.
         /// </summary>
-        public static void Back()
+        public static void Back() { Traced("Back", BackCore); }
+
+        private static void BackCore()
         {
             PadInput.NotePad();
             try
@@ -423,9 +481,8 @@ namespace PlayniteGameOverlay
             protected override void OnRender(System.Windows.Media.DrawingContext dc)
             {
                 var r = new Rect(-2, -2, AdornedElement.RenderSize.Width + 4, AdornedElement.RenderSize.Height + 4);
-                var pen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.White, 2);
                 var fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 255, 255, 255));
-                dc.DrawRoundedRectangle(fill, pen, r, 4, 4);
+                dc.DrawRoundedRectangle(fill, null, r, 4, 4);
             }
         }
 
@@ -623,9 +680,8 @@ namespace PlayniteGameOverlay
                     }
                 }
                 catch { }
-                var pen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.White, 2);
                 var fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 255, 255, 255));
-                dc.DrawRoundedRectangle(fill, pen, r, 4, 4);
+                dc.DrawRoundedRectangle(fill, null, r, 4, 4);
             }
         }
 
@@ -1249,8 +1305,9 @@ namespace PlayniteGameOverlay
                 var menu = target.ContextMenu;
                 if (menu != null && menu.HasItems)
                 {
+                    // Beside the selected item (WPF shifts it to stay on screen), not centred on top of the list.
                     menu.PlacementTarget = target;
-                    menu.Placement = PlacementMode.Center;
+                    menu.Placement = PlacementMode.Right;
                     menu.IsOpen = true;
                     _padMenu = menu;
                 }
@@ -1290,6 +1347,55 @@ namespace PlayniteGameOverlay
             catch (Exception ex)
             {
                 Breadcrumb.Write("DesktopNav.OpenContextMenu failed: " + ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Start: opens Playnite's main menu (the "Playnite" button at the left of the top bar), or closes it when it is
+        /// already open. The menu is then driven like any other context menu (D-pad / A / B).
+        /// </summary>
+        public static bool ToggleMainMenu()
+        {
+            PadInput.NotePad();
+            try
+            {
+                var open = ResolveOpenMenu();
+                if (open != null)
+                {
+                    open.IsOpen = false;
+                    _padMenu = null;
+                    return true;
+                }
+
+                var window = GetForegroundPlayniteWindow();
+                if (window == null) return false;
+
+                FrameworkElement host = null;
+                foreach (var fe in FindVisualChildren<FrameworkElement>(window))
+                {
+                    if (fe.Name == "PART_ElemMainMenu" && fe.ContextMenu != null) { host = fe; break; }
+                }
+                if (host == null || !IsUsable(host))
+                {
+                    Breadcrumb.Write("DesktopNav.ToggleMainMenu: main menu button not found / hidden (" + (host == null ? "missing" : "not visible") + ")");
+                    return false;
+                }
+
+                ExitTopBarMode();
+                ExitDetailsMode();
+                var menu = host.ContextMenu;
+                // Same thing Playnite's own left click does, placed under the button.
+                menu.PlacementTarget = host;
+                menu.Placement = PlacementMode.Bottom;
+                menu.IsOpen = true;
+                _padMenu = menu;
+                FocusFirstMenuItemSoon();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Breadcrumb.Write("DesktopNav.ToggleMainMenu failed: " + ex.Message);
                 return false;
             }
         }
@@ -2143,8 +2249,10 @@ namespace PlayniteGameOverlay
         {
             ScrollViewer scroll = anchor != null ? FindVisualParent<ScrollViewer>(anchor) : null;
             var all = new List<NavStop>();
+            // PERF: walk only the list's own subtree. Walking the whole window on every D-pad step was the lag.
+            DependencyObject scanRoot = scroll != null ? (DependencyObject)scroll : window;
 
-            foreach (var item in FindVisualChildren<ListBoxItem>(window))
+            foreach (var item in FindVisualChildren<ListBoxItem>(scanRoot))
             {
                 if (!IsUsable(item)) continue;   // inside a collapsed group => not visible
                 Guid id;
@@ -2155,7 +2263,7 @@ namespace PlayniteGameOverlay
                 all.Add(new NavStop { Element = item, Id = id, X = pos.X, Y = pos.Y });
             }
 
-            foreach (var group in FindVisualChildren<GroupItem>(window))
+            foreach (var group in FindVisualChildren<GroupItem>(scanRoot))
             {
                 if (!IsUsable(group) || !IsCollapsedGroup(group)) continue;
                 if (FindVisualParent<ScrollViewer>(group) != scroll) continue;
@@ -2174,6 +2282,7 @@ namespace PlayniteGameOverlay
         /// </summary>
         private static bool MoveListVisible(int delta, GroupItem fromHeader = null)
         {
+            long mlvStart = Stopwatch.GetTimestamp();
             try
             {
                 if (_api?.MainView == null || delta == 0) return false;
@@ -2188,23 +2297,34 @@ namespace PlayniteGameOverlay
                     selectedId = selected.Id;
                 }
 
+                ListBoxItem FindInRoot(DependencyObject root)
+                {
+                    ListBoxItem firstMatch = null;
+                    foreach (var item in FindVisualChildren<ListBoxItem>(root))
+                    {
+                        Guid id;
+                        if (!IsUsable(item) || !TryGetGameId(item.DataContext, out id) || id != selectedId) continue;
+                        if (item.IsSelected) return item;          // the same game can be listed in several groups
+                        if (firstMatch == null) firstMatch = item;
+                    }
+                    return firstMatch;
+                }
+
                 FrameworkElement FindAnchor()
                 {
                     if (fromHeader != null) return IsUsable(fromHeader) ? fromHeader : null;
-                    foreach (var item in FindVisualChildren<ListBoxItem>(window))
-                    {
-                        Guid id;
-                        if (IsUsable(item) && TryGetGameId(item.DataContext, out id) && id == selectedId)
-                            return item;
-                    }
-                    return null;
+                    ListBoxItem found = null;
+                    if (_navList != null && IsUsable(_navList)) found = FindInRoot(_navList);   // PERF: cached list
+                    if (found == null) found = FindInRoot(window);
+                    if (found != null) _navList = FindVisualParent<ListBox>(found);
+                    return found;
                 }
 
-                int IndexOfCurrent(List<NavStop> stops)
+                int IndexOfCurrent(List<NavStop> stops, FrameworkElement cur)
                 {
-                    return fromHeader != null
-                        ? stops.FindIndex(x => x.Group == fromHeader)
-                        : stops.FindIndex(x => x.Group == null && x.Id == selectedId);
+                    if (fromHeader != null) return stops.FindIndex(x => x.Group == fromHeader);
+                    int exact = stops.FindIndex(x => x.Group == null && ReferenceEquals(x.Element, cur));
+                    return exact >= 0 ? exact : stops.FindIndex(x => x.Group == null && x.Id == selectedId);
                 }
 
                 var anchor = FindAnchor();
@@ -2212,7 +2332,7 @@ namespace PlayniteGameOverlay
                 var scrollViewer = FindVisualParent<ScrollViewer>(anchor);
 
                 var ordered = CollectListStops(window, anchor);
-                int idx = IndexOfCurrent(ordered);
+                int idx = IndexOfCurrent(ordered, anchor);
                 if (idx < 0) return false;
                 int next = idx + delta;
 
@@ -2228,7 +2348,7 @@ namespace PlayniteGameOverlay
                     anchor = FindAnchor();
                     if (anchor == null) return false;
                     ordered = CollectListStops(window, anchor);
-                    idx = IndexOfCurrent(ordered);
+                    idx = IndexOfCurrent(ordered, anchor);
                     if (idx < 0) return false;
                     next = idx + delta;
                 }
@@ -2237,6 +2357,13 @@ namespace PlayniteGameOverlay
                     return true; // genuinely the first / last stop: stay put
 
                 var target = ordered[next];
+                if (Breadcrumb.Enabled)
+                {
+                    int dupIds = ordered.Where(x => x.Group == null).GroupBy(x => x.Id).Count(g => g.Count() > 1);
+                    Breadcrumb.Write("MoveListVisible: stops=" + ordered.Count + " idx=" + idx + " next=" + next +
+                        " dupGameIds=" + dupIds + " scan=" + ((Stopwatch.GetTimestamp() - mlvStart) * 1000.0 / Stopwatch.Frequency).ToString("0.0") + "ms" +
+                        " target=" + (target.Group != null ? "collapsed-group-header" : "game " + target.Id));
+                }
                 if (target.Group != null)
                 {
                     // A collapsed group: stop on its header so it can be expanded (A / Right).
@@ -2247,11 +2374,78 @@ namespace PlayniteGameOverlay
                 }
 
                 if (_groupHeaderMode) ExitGroupHeaderMode();
+                long selT0 = Stopwatch.GetTimestamp();
                 _api.MainView.SelectGame(target.Id);
+                long selT1 = Stopwatch.GetTimestamp();
                 try { target.Element.BringIntoView(); } catch { }
+                long selT2 = Stopwatch.GetTimestamp();
+                EnsureSingleSelection(target.Element as ListBoxItem);
+                if (Breadcrumb.Enabled)
+                {
+                    double selMs = (selT1 - selT0) * 1000.0 / Stopwatch.Frequency, bivMs = (selT2 - selT1) * 1000.0 / Stopwatch.Frequency;
+                    if (selMs + bivMs > 80) LogSlowSelect(target.Id, selMs, bivMs);
+                }
                 return true;
             }
             catch { return false; }
+        }
+
+        /// <summary>Why selecting this game was slow: Playnite loads and decodes its images on selection. Logs their sizes.</summary>
+        private static void LogSlowSelect(Guid id, double selectMs, double bringMs)
+        {
+            try
+            {
+                var g = _api.Database.Games.Get(id);
+                var sb = new StringBuilder();
+                sb.Append("SlowSelect: SelectGame ").Append(selectMs.ToString("0")).Append(" ms, BringIntoView ").Append(bringMs.ToString("0"))
+                  .Append(" ms for \"").Append(g != null ? g.Name : id.ToString()).Append("\"");
+                if (g != null)
+                {
+                    foreach (var pair in new[] { new KeyValuePair<string, string>("background", g.BackgroundImage),
+                                                 new KeyValuePair<string, string>("cover", g.CoverImage),
+                                                 new KeyValuePair<string, string>("icon", g.Icon) })
+                    {
+                        if (string.IsNullOrEmpty(pair.Value)) { sb.Append(" | ").Append(pair.Key).Append(": none"); continue; }
+                        string path = null;
+                        try { path = _api.Database.GetFullFilePath(pair.Value); } catch { }
+                        if (path == null || !System.IO.File.Exists(path)) { sb.Append(" | ").Append(pair.Key).Append(": not a local file"); continue; }
+                        sb.Append(" | ").Append(pair.Key).Append(": ").Append(new System.IO.FileInfo(path).Length / 1024).Append(" KB");
+                        try
+                        {
+                            var dec = System.Windows.Media.Imaging.BitmapDecoder.Create(new Uri(path),
+                                System.Windows.Media.Imaging.BitmapCreateOptions.DelayCreation | System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreColorProfile,
+                                System.Windows.Media.Imaging.BitmapCacheOption.None);
+                            sb.Append(' ').Append(dec.Frames[0].PixelWidth).Append('x').Append(dec.Frames[0].PixelHeight);
+                        }
+                        catch { }
+                    }
+                }
+                Breadcrumb.Write(sb.ToString());
+            }
+            catch { }
+        }
+
+        private static ListBox _navList;   // the games list found on the last step (avoids re-scanning the window)
+
+        /// <summary>
+        /// A pad step must leave exactly one game selected. The list can be in Extended mode, and a game listed in
+        /// two groups (e.g. two platforms) gets both of its rows selected by SelectGame(id). Setting SelectedItem
+        /// replaces the whole selection with just the row the pad is on.
+        /// </summary>
+        private static void EnsureSingleSelection(ListBoxItem item)
+        {
+            if (item == null) return;
+            Defer(() =>
+            {
+                try
+                {
+                    var lb = FindVisualParent<ListBox>(item);
+                    if (lb == null || lb.SelectedItems.Count <= 1) return;
+                    lb.SelectedItem = item.DataContext;
+                    Breadcrumb.Write("PadNav: collapsed multi-selection (" + lb.SelectedItems.Count + " rows) to one row");
+                }
+                catch { }
+            });
         }
 
         /// <summary>Header mode on a collapsed group: Up/Down continue through games and other collapsed headers.</summary>
@@ -2274,6 +2468,7 @@ namespace PlayniteGameOverlay
                 if (_api?.MainView == null) return;
 
                 if (!IsGridView() && MoveListVisible(delta)) return;
+                Breadcrumb.Throttled("mlv-fallback", 500, "MoveSelection: list-view stepping unavailable, using collection-order fallback");
 
                 List<Game> list = null;
                 try { list = _api.MainView.FilteredGames; } catch { }
@@ -2380,9 +2575,8 @@ namespace PlayniteGameOverlay
             protected override void OnRender(System.Windows.Media.DrawingContext dc)
             {
                 var r = new Rect(-2, -2, AdornedElement.RenderSize.Width + 4, AdornedElement.RenderSize.Height + 4);
-                var pen = new System.Windows.Media.Pen(System.Windows.Media.Brushes.White, 2);
                 var fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(30, 255, 255, 255));
-                dc.DrawRoundedRectangle(fill, pen, r, 4, 4);
+                dc.DrawRoundedRectangle(fill, null, r, 4, 4);
             }
         }
 
@@ -2443,6 +2637,10 @@ namespace PlayniteGameOverlay
             try
             {
                 if (!ReferenceEquals(OwnerWindow(f), w)) return null;
+                // Keyboard focus often rests on the window itself (it takes it when activated, or when the focused
+                // control disappears). There is nothing to press on it, and outlining it draws a white frame around
+                // the whole window: treat it as "no focus" so the next press seats the selection on a real control.
+                if (f is Window || f is UserControl || f is Page || f is Frame) return null;
                 var fe = f as FrameworkElement;
                 if (fe != null && !(fe is Window) && (!fe.IsVisible || !fe.IsEnabled)) return null;
                 return f;
@@ -2538,15 +2736,28 @@ namespace PlayniteGameOverlay
             ExitListMode();
             var ex = DesktopControllerNav.FindVisualChildren<Expander>(w).FirstOrDefault(e => DesktopControllerNav.IsUsable(e));
             var header = ex != null ? HeaderOf(ex) : null;
-            if (header != null) { FocusElement(header); return; }
+            if (header != null)
+            {
+                FocusElement(header);
+                if (FocusedIn(w) != null) return;
+            }
 
-            // Tab strip: start on the selected tab.
+            // Tab strip: start on the selected tab. A tab-less TabControl (a page host) has no visible tab to land on:
+            // focusing its hidden tab silently fails and used to leave the window itself focused.
             var tabs = DesktopControllerNav.FindVisualChildren<TabControl>(w).FirstOrDefault(t => DesktopControllerNav.IsUsable(t) && t.Items.Count > 1);
             if (tabs != null)
             {
                 var tab = tabs.ItemContainerGenerator.ContainerFromIndex(Math.Max(0, tabs.SelectedIndex)) as TabItem;
-                if (tab != null) { FocusElement(tab); return; }
+                if (tab != null && DesktopControllerNav.IsUsable(tab))
+                {
+                    FocusElement(tab);
+                    if (FocusedIn(w) != null) return;
+                }
             }
+
+            // Settings-style window: start on the selected section of its section tree.
+            var tree = FindSidebar(w) as TreeView;
+            if (tree != null && FocusSidebar(w, tree)) return;
 
             bool hasInputs =
                 DesktopControllerNav.FindVisualChildren<Selector>(w).Any(c => DesktopControllerNav.IsUsable(c)) ||
@@ -2562,6 +2773,31 @@ namespace PlayniteGameOverlay
 
             try { w.MoveFocus(new TraversalRequest(FocusNavigationDirection.First)); } catch { }
             SkipPanels(w, FocusNavigationDirection.Next);
+
+            // Last resort: never leave the pad without a selection.
+            if (FocusedIn(w) == null) FocusAnyControl(w);
+        }
+
+        /// <summary>The topmost-leftmost control the pad can use (default / cancel buttons included).</summary>
+        private static void FocusAnyControl(Window w)
+        {
+            try
+            {
+                FrameworkElement best = null;
+                double bestY = double.MaxValue, bestX = double.MaxValue;
+                foreach (var fe in DesktopControllerNav.FindVisualChildren<FrameworkElement>(w))
+                {
+                    if (!IsContentCandidate(fe, true)) continue;
+                    var p = DesktopControllerNav.GetPosition(fe, w);
+                    if (double.IsNaN(p.X) || double.IsNaN(p.Y)) continue;
+                    if (p.Y < bestY - 0.5 || (Math.Abs(p.Y - bestY) <= 0.5 && p.X < bestX))
+                    {
+                        best = fe; bestY = p.Y; bestX = p.X;
+                    }
+                }
+                if (best != null) FocusElement(best);
+            }
+            catch { }
         }
 
         /// <summary>Menu-style rows (wide buttons, toggles, expander headers, list items): highlighted with a soft fill, no outline.</summary>
@@ -2575,6 +2811,15 @@ namespace PlayniteGameOverlay
 
         private static void Highlight(Window w) { HighlightElement(w, null); }
 
+        /// <summary>True for elements an outline must not be drawn around: the window, a page host, a whole-page scroller.</summary>
+        private static bool IsOversizedOutline(FrameworkElement fe, Window w)
+        {
+            if (fe is Window || fe is ScrollViewer || fe is UserControl || fe is Page || fe is Frame || fe is TabControl) return true;
+            if (fe is TextBoxBase || fe is Selector || fe is TreeView) return false;     // big on purpose (editors, lists)
+            return w != null && w.ActualWidth > 0 && w.ActualHeight > 0 &&
+                   fe.ActualWidth >= w.ActualWidth * 0.85 && fe.ActualHeight >= w.ActualHeight * 0.6;
+        }
+
         private static void HighlightElement(Window w, FrameworkElement target, bool row = false)
         {
             // Layout (scrolling into view) has to settle before the outline is placed.
@@ -2587,6 +2832,7 @@ namespace PlayniteGameOverlay
                     var fe = target ?? (FocusedIn(w) as FrameworkElement);
                     if (fe == null || !fe.IsVisible) return;
                     if (target == null && IsPanelLike(fe, FindContentList(w))) return;   // never outline an info panel
+                    if (!row && IsOversizedOutline(fe, w)) return;                        // never frame a whole window / page
                     var layer = AdornerLayer.GetAdornerLayer(fe);
                     if (layer == null) return;
                     if (row) _adorner = new RowHighlight(fe);
@@ -2623,6 +2869,36 @@ namespace PlayniteGameOverlay
         /// selected, and a pad cannot "click" them: select whatever just received focus.
         /// </summary>
         private static TreeViewItem _lastSelectedTvi;
+
+        // Selecting a section makes the host window load that section's page, and the page often grabs keyboard
+        // focus while it loads: the pad then suddenly drove the page without Right / A having been pressed.
+        // While the pad rests on the section list, focus that wanders into the page is put back.
+        private static TreeViewItem _holdTvi;
+
+        private static void HoldSidebarFocus(Window w, TreeViewItem tvi)
+        {
+            _holdTvi = tvi;
+            foreach (int ms in new[] { 60, 180, 400, 800, 1400 })
+            {
+                var t = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ms) };
+                t.Tick += (s, e) =>
+                {
+                    t.Stop();
+                    try
+                    {
+                        if (!ReferenceEquals(_holdTvi, tvi) || w == null || !w.IsVisible || !PadInput.Active) return;
+                        var cur = FocusedIn(w);
+                        var tree = DesktopControllerNav.FindVisualParent<TreeView>(tvi);
+                        if (tree == null || !DesktopControllerNav.IsUsable(tvi)) return;
+                        if (cur != null && IsDescendantOf(cur, tree)) return;      // still on the section list
+                        FocusElement(tvi);
+                        Highlight(w);
+                    }
+                    catch { }
+                };
+                t.Start();
+            }
+        }
 
         /// <summary>Raise a left click on the middle of the element's header, as a mouse would.</summary>
         private static void ClickLikeMouse(FrameworkElement el)
@@ -2682,6 +2958,7 @@ namespace PlayniteGameOverlay
                         // reproduce: click the item's header as well.
                         DesktopControllerNav.Defer(() => ClickLikeMouse(tvi));
                     }
+                    HoldSidebarFocus(w, tvi);
                     return;
                 }
 
@@ -2697,6 +2974,88 @@ namespace PlayniteGameOverlay
         }
 
         /// <summary>Nothing left to focus in that direction: scroll the window's main scroll area instead.</summary>
+        /// <summary>
+        /// Focus a real control inside a scroll area: coming from below (Up) the lowest one in view, otherwise the topmost.
+        /// </summary>
+        private static bool FocusInsideScrollViewer(Window w, ScrollViewer sv, FocusNavigationDirection dir)
+        {
+            try
+            {
+                var svPos = DesktopControllerNav.GetPosition(sv, w);
+                var all = new List<FrameworkElement>();
+                var inView = new List<FrameworkElement>();
+                foreach (var fe in DesktopControllerNav.FindVisualChildren<FrameworkElement>(sv))
+                {
+                    if (!IsContentCandidate(fe, true)) continue;
+                    all.Add(fe);
+                    var p = DesktopControllerNav.GetPosition(fe, w);
+                    if (double.IsNaN(p.Y)) continue;
+                    if (p.Y >= svPos.Y - 1 && p.Y + fe.ActualHeight <= svPos.Y + sv.ActualHeight + 1) inView.Add(fe);
+                }
+                var pool = inView.Count > 0 ? inView : all;
+                if (pool.Count == 0) return false;
+                bool wantLowest = dir == FocusNavigationDirection.Up;
+                FrameworkElement best = null;
+                double bestY = wantLowest ? double.MinValue : double.MaxValue, bestX = double.MaxValue;
+                foreach (var fe in pool)
+                {
+                    var p = DesktopControllerNav.GetPosition(fe, w);
+                    if (double.IsNaN(p.Y)) continue;
+                    bool better = wantLowest ? (p.Y > bestY + 0.5 || (Math.Abs(p.Y - bestY) <= 0.5 && p.X < bestX))
+                                             : (p.Y < bestY - 0.5 || (Math.Abs(p.Y - bestY) <= 0.5 && p.X < bestX));
+                    if (better) { best = fe; bestY = p.Y; bestX = p.X; }
+                }
+                if (best == null) return false;
+                FocusElement(best);
+                bool ok = FocusedIn(w) != null && !(FocusedIn(w) is ScrollViewer);
+                if (Breadcrumb.Enabled) Breadcrumb.Write("FocusInsideScrollViewer " + dir + " -> " + Describe(best, w) + " ok=" + ok);
+                return ok;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Nearest usable control strictly in the given direction (by centre), moving focus onto it.</summary>
+        private static bool FocusNearest(Window w, FrameworkElement origin, FocusNavigationDirection dir)
+        {
+            try
+            {
+                var fp = DesktopControllerNav.GetPosition(origin, w);
+                if (double.IsNaN(fp.X) || double.IsNaN(fp.Y)) return false;
+                double cx = fp.X + origin.ActualWidth / 2, cy = fp.Y + origin.ActualHeight / 2;
+
+                FrameworkElement best = null;
+                double bestScore = double.MaxValue;
+                foreach (var fe in DesktopControllerNav.FindVisualChildren<FrameworkElement>(w))
+                {
+                    if (ReferenceEquals(fe, origin) || IsDescendantOf(fe, origin) || IsDescendantOf(origin, fe)) continue;
+                    if (!IsContentCandidate(fe, true)) continue;
+                    var p = DesktopControllerNav.GetPosition(fe, w);
+                    if (double.IsNaN(p.X) || double.IsNaN(p.Y)) continue;
+                    double dx = p.X + fe.ActualWidth / 2 - cx;
+                    double dy = p.Y + fe.ActualHeight / 2 - cy;
+
+                    double along, across;
+                    switch (dir)
+                    {
+                        case FocusNavigationDirection.Up:    along = -dy; across = Math.Abs(dx); break;
+                        case FocusNavigationDirection.Down:  along = dy;  across = Math.Abs(dx); break;
+                        case FocusNavigationDirection.Left:  along = -dx; across = Math.Abs(dy); break;
+                        case FocusNavigationDirection.Right: along = dx;  across = Math.Abs(dy); break;
+                        default: return false;
+                    }
+                    if (along < 2) continue;                       // not in that direction
+                    double score = along + across * 2.5;           // prefer what is straight ahead
+                    if (score < bestScore) { bestScore = score; best = fe; }
+                }
+                if (Breadcrumb.Enabled)
+                    Breadcrumb.Write("FocusNearest " + dir + " from " + Describe(origin, w) + " -> " + (best != null ? Describe(best, w) + " score=" + bestScore.ToString("0") : "no candidate"));
+                if (best == null) return false;
+                FocusElement(best);                                // also scrolls it into view
+                return FocusedIn(w) != null && !ReferenceEquals(FocusedIn(w), origin);
+            }
+            catch { return false; }
+        }
+
         private static void ScrollFallback(Window w, int sign)
         {
             try
@@ -2722,10 +3081,22 @@ namespace PlayniteGameOverlay
             try
             {
                 if (w == null || !w.IsVisible) return;
+
+                // Settings-style window (section list on the left, page on the right): start on the section list.
+                // Starting in the page's list instead left the pad inside the page, and the section list only
+                // answered after a D-pad Left press.
+                var startSide = FindSidebar(w);
+                if (startSide != null)
+                {
+                    _startedWindow = new WeakReference(w);
+                    ExitListMode();
+                    if (FocusSidebar(w, startSide)) { SelectFocused(w); Highlight(w); return; }
+                }
+
                 // Windows built around a long list (the achievements window ...): start on its first row,
                 // not on the header / buttons above it.
-                if (TryStartInList(w)) return;
-                ScheduleListStart(w, 0);
+                else if (TryStartInList(w)) return;
+                if (startSide == null) ScheduleListStart(w, 0);
 
                 var f = FocusedIn(w) as FrameworkElement;
                 // Keep focus where the window put it only when it is on something worth navigating from.
@@ -2753,7 +3124,7 @@ namespace PlayniteGameOverlay
                 var list = FindContentList(w);
                 if (list == null || list.Items.Count == 0)
                 {
-                    try { Breadcrumb.Write("PadList: no content list in '" + w.GetType().Name + "' (yet)"); } catch { }
+                    try { Breadcrumb.Throttled("padlist-none", 5000, "PadList: no content list in '" + w.GetType().Name + "' (yet)"); } catch { }
                     return false;
                 }
                 list.UpdateLayout();
@@ -2807,6 +3178,8 @@ namespace PlayniteGameOverlay
         private static bool FirstTouchEnterList(Window w)
         {
             if (StartedOn(w)) return false;
+            // A window with a section list on the left starts on that list (the caller then seats the selection).
+            if (FindSidebar(w) != null) { _startedWindow = new WeakReference(w); return false; }
             return TryStartInList(w);
         }
 
@@ -2827,6 +3200,7 @@ namespace PlayniteGameOverlay
                     try
                     {
                         if (w == null || !w.IsVisible || _listCtl != null) return;
+                        if (FindSidebar(w) != null) return;                          // section list: never jump into the page
                         if (!ReferenceEquals(FocusedIn(w), focusAtStart)) return;   // user already navigated
                         if (TryStartInList(w)) return;
                         ScheduleListStart(w, attempt + 1);
@@ -2952,12 +3326,58 @@ namespace PlayniteGameOverlay
             int n = list.Items.Count;
             if (n == 0) return;
             idx = Math.Max(0, Math.Min(n - 1, idx));
-            var c = RowContainer(list, idx);
-            if (c == null) return;
+            // Remember the row first: when its container is not built yet (fast scrolling), list mode must survive
+            // and the outline be placed a moment later, not be lost.
             _listCtl = list;
             _listIdx = idx;
-            try { c.BringIntoView(); } catch { }
-            HighlightElement(w, c, true);
+            var c = RowContainer(list, idx);
+            if (c != null) { try { c.BringIntoView(); } catch { } }
+            HighlightListRow(w, list, idx, 0);
+        }
+
+        private static int _rowHlSeq;
+
+        /// <summary>
+        /// Outline for a row of the long list, placed once layout has settled. It looks the row's container up when it
+        /// runs (virtualization recycles containers while scrolling, so one captured earlier may now show another row
+        /// or be gone), only the newest request runs, and the previous outline stays until the new one is ready.
+        /// </summary>
+        private static void HighlightListRow(Window w, ItemsControl list, int idx, int attempt)
+        {
+            int seq = ++_rowHlSeq;
+            w.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    if (seq != _rowHlSeq) return;                         // a newer step took over
+                    if (!PadInput.Active || !ReferenceEquals(_listCtl, list) || _listIdx != idx) return;
+                    var fe = list.ItemContainerGenerator.ContainerFromIndex(idx) as FrameworkElement;
+                    if (fe == null || !fe.IsVisible)
+                    {
+                        if (attempt < 6)
+                        {
+                            try
+                            {
+                                var lb = list as ListBox;
+                                if (lb != null) lb.ScrollIntoView(list.Items[idx]);
+                                else { var dg = list as DataGrid; if (dg != null) dg.ScrollIntoView(list.Items[idx]); }
+                            }
+                            catch { }
+                            HighlightListRow(w, list, idx, attempt + 1);
+                        }
+                        else Breadcrumb.Write("PadList: row " + idx + " never got a container (list has " + list.Items.Count + " rows)");
+                        return;
+                    }
+                    if (_adorner != null && ReferenceEquals(_adorner.AdornedElement, fe)) return;   // already outlined
+                    Clear();
+                    var layer = AdornerLayer.GetAdornerLayer(fe);
+                    if (layer == null) return;
+                    _adorner = new RowHighlight(fe);
+                    layer.Add(_adorner);
+                    _layer = layer;
+                }
+                catch { }
+            }), System.Windows.Threading.DispatcherPriority.Background);
         }
 
         private static int FirstVisibleRow(Window w, ItemsControl list)
@@ -3060,21 +3480,405 @@ namespace PlayniteGameOverlay
             return true;
         }
 
-        public static void Move(Window w, FocusNavigationDirection dir)
+        // ---- Section list (sidebar) <-> page ---------------------------------------------------------
+        // Settings-style windows (Playnite's own settings, the add-ons window ...) have a list of sections on the left
+        // (tree, list or tab strip) and the selected section's page on the right. WPF keeps directional focus
+        // inside such a list ("Contained"), so the pad could walk the sections but Right / A never reached the page.
+        // Right / A now hand the selection over to the first control of the page, and Left brings it back.
+
+        /// <summary>A section list sits in the left part of the window and is clearly narrower than the page next to it.</summary>
+        private static bool IsSidebarLike(Window w, FrameworkElement root)
+        {
+            try
+            {
+                if (root == null || w == null || !DesktopControllerNav.IsUsable(root) || w.ActualWidth < 200) return false;
+                var p = DesktopControllerNav.GetPosition(root, w);
+                if (double.IsNaN(p.X)) return false;
+                return root.ActualWidth <= w.ActualWidth * 0.5 && (p.X + root.ActualWidth / 2) <= w.ActualWidth * 0.4;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>The section list the focused element belongs to (tree, left tab strip, narrow list), or null.</summary>
+        private static FrameworkElement SidebarRootOf(Window w, DependencyObject f)
+        {
+            try
+            {
+                if (f == null) return null;
+
+                var tvi = SelfOrParent<TreeViewItem>(f);
+                if (tvi != null)
+                {
+                    var tree = DesktopControllerNav.FindVisualParent<TreeView>(tvi);
+                    return IsSidebarLike(w, tree) ? tree : null;
+                }
+
+                var tab = f as TabItem;
+                if (tab != null)
+                {
+                    var tabControl = ItemsControl.ItemsControlFromItemContainer(tab) as TabControl;
+                    if (tabControl != null && tabControl.TabStripPlacement == Dock.Left)
+                    {
+                        var panel = DesktopControllerNav.FindVisualParent<TabPanel>(tab);
+                        if (panel != null && DesktopControllerNav.IsUsable(panel)) return panel;
+                    }
+                    return null;
+                }
+
+                var lbi = f as ListBoxItem;
+                if (lbi != null)
+                {
+                    var lb = ItemsControl.ItemsControlFromItemContainer(lbi) as ListBox;
+                    if (lb != null && !ReferenceEquals(lb, FindContentList(w)) && IsSidebarLike(w, lb)) return lb;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        /// <summary>The window's section list (tree, left tab strip or narrow single-select list), or null.</summary>
+        private static FrameworkElement FindSidebar(Window w)
+        {
+            try
+            {
+                foreach (var tree in DesktopControllerNav.FindVisualChildren<TreeView>(w))
+                    if (tree.HasItems && IsSidebarLike(w, tree)) return tree;
+
+                foreach (var tc in DesktopControllerNav.FindVisualChildren<TabControl>(w))
+                {
+                    if (!DesktopControllerNav.IsUsable(tc) || tc.TabStripPlacement != Dock.Left || tc.Items.Count < 2) continue;
+                    var panel = DesktopControllerNav.FindVisualChildren<TabPanel>(tc).FirstOrDefault(x => DesktopControllerNav.IsUsable(x));
+                    if (panel != null) return panel;
+                }
+
+                var content = FindContentList(w);
+                foreach (var lb in DesktopControllerNav.FindVisualChildren<ListBox>(w))
+                {
+                    if (ReferenceEquals(lb, content) || lb.Items.Count == 0 || lb.SelectionMode != SelectionMode.Single) continue;
+                    if (!IsSidebarLike(w, lb)) continue;
+                    if (DesktopControllerNav.FindVisualParent<ListBoxItem>(lb) != null ||
+                        DesktopControllerNav.FindVisualParent<TreeViewItem>(lb) != null) continue;
+                    return lb;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static TreeViewItem FindSelectedTreeItem(ItemsControl host)
+        {
+            for (int i = 0; i < host.Items.Count; i++)
+            {
+                var c = host.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
+                if (c == null) continue;
+                if (c.IsSelected) return c;
+                if (c.IsExpanded && c.HasItems)
+                {
+                    var inner = FindSelectedTreeItem(c);
+                    if (inner != null) return inner;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// The selectable entries of a tree in display order: expanded groups contribute their children,
+        /// separators, hidden and disabled entries are left out.
+        /// </summary>
+        private static void CollectTreeEntries(ItemsControl host, List<TreeViewItem> into, int depth)
+        {
+            if (host == null || depth > 8) return;
+            for (int i = 0; i < host.Items.Count; i++)
+            {
+                var c = host.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
+                if (c == null || c.Visibility != Visibility.Visible) continue;
+                // A Separator placed straight into a TreeView is wrapped in a TreeViewItem of its own.
+                bool selectable = !(c.Header is Separator) && c.IsEnabled && c.Focusable;
+                if (selectable) into.Add(c);
+                if (c.IsExpanded && c.HasItems) CollectTreeEntries(c, into, depth + 1);
+            }
+        }
+
+        /// <summary>Up / Down in a tree: move to the previous / next visible entry. False = not handled here.</summary>
+        private static bool StepTree(Window w, TreeViewItem from, int sign)
+        {
+            try
+            {
+                var tree = DesktopControllerNav.FindVisualParent<TreeView>(from);
+                if (tree == null) return false;
+                var entries = new List<TreeViewItem>();
+                CollectTreeEntries(tree, entries, 0);
+                int idx = entries.IndexOf(from);
+                if (idx < 0)
+                {
+                    try { Breadcrumb.Write("PadSettings: tree step - focused entry not in the visible list (" + entries.Count + " entries)"); } catch { }
+                    return false;
+                }
+                int ni = idx + sign;
+                if (ni < 0 || ni >= entries.Count) return true;      // first / last entry: stay
+                FocusElement(entries[ni]);
+                if (FocusedIn(w) == null) return false;
+                SelectFocused(w);
+                Highlight(w);
+                return true;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>Put the selection back on the section list (on its selected entry).</summary>
+        private static bool FocusSidebar(Window w, FrameworkElement side)
+        {
+            try
+            {
+                FrameworkElement target = null;
+                var tree = side as TreeView;
+                if (tree != null)
+                {
+                    target = FindSelectedTreeItem(tree);
+                    if (target == null || !DesktopControllerNav.IsUsable(target))
+                        target = DesktopControllerNav.FindVisualChildren<TreeViewItem>(tree).FirstOrDefault(x => DesktopControllerNav.IsUsable(x));
+                }
+                else if (side is TabPanel)
+                {
+                    var tc = DesktopControllerNav.FindVisualParent<TabControl>(side);
+                    if (tc != null) target = tc.ItemContainerGenerator.ContainerFromIndex(Math.Max(0, tc.SelectedIndex)) as TabItem;
+                }
+                else
+                {
+                    var lb = side as ListBox;
+                    if (lb != null)
+                    {
+                        FrameworkElement sel = lb.SelectedIndex >= 0
+                            ? lb.ItemContainerGenerator.ContainerFromIndex(lb.SelectedIndex) as FrameworkElement
+                            : null;
+                        target = sel ?? (lb.ItemContainerGenerator.ContainerFromIndex(0) as FrameworkElement);
+                    }
+                }
+
+                if (target == null || !DesktopControllerNav.IsUsable(target)) return false;
+                ExitListMode();
+                FocusElement(target);
+                if (FocusedIn(w) == null) return false;
+                Highlight(w);
+                return true;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>A control the pad can move onto: buttons, toggles, boxes, lists, sliders - not parts of other controls.</summary>
+        private static bool IsContentCandidate(FrameworkElement fe, bool includeDefaultButtons)
+        {
+            try
+            {
+                if (fe == null || !fe.Focusable || !fe.IsEnabled || !DesktopControllerNav.IsUsable(fe)) return false;
+                if (fe is TabControl) return false;
+                bool typeOk = fe is ButtonBase || fe is Selector || fe is TextBoxBase || fe is PasswordBox || fe is Slider || fe is TreeView;
+                if (!typeOk) return false;
+                if (fe is RepeatButton || fe is DataGridColumnHeader || fe is GridViewColumnHeader) return false;
+                var btn = fe as Button;
+                if (btn != null && !includeDefaultButtons && (btn.IsDefault || btn.IsCancel)) return false;
+                if (!(fe is ComboBox) && DesktopControllerNav.FindVisualParent<ComboBox>(fe) != null) return false;
+                if (DesktopControllerNav.FindVisualParent<ScrollBar>(fe) != null) return false;
+                return true;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// The first thing to select on the page right of the section list: its topmost control (or the window's long
+        /// list, when that comes first). Save / Cancel are not page content.
+        /// </summary>
+        private static FrameworkElement FindContentTarget(Window w, FrameworkElement sidebar, out bool isList)
+        {
+            isList = false;
+            var sp = DesktopControllerNav.GetPosition(sidebar, w);
+            if (double.IsNaN(sp.X)) return null;
+            double rightEdge = sp.X + sidebar.ActualWidth;
+            var content = FindContentList(w);
+
+            FrameworkElement best = null;
+            double bestY = double.MaxValue, bestX = double.MaxValue;
+            foreach (var fe in DesktopControllerNav.FindVisualChildren<FrameworkElement>(w))
+            {
+                bool isContentList = content != null && ReferenceEquals(fe, content);
+                if (!isContentList)
+                {
+                    if (!IsContentCandidate(fe, false)) continue;
+                    if (content != null && IsDescendantOf(fe, content)) continue;
+                }
+                if (IsDescendantOf(fe, sidebar)) continue;
+
+                var p = DesktopControllerNav.GetPosition(fe, w);
+                if (double.IsNaN(p.X) || double.IsNaN(p.Y)) continue;
+                if (p.X + fe.ActualWidth / 2 < rightEdge) continue;                 // not right of the section list
+                if (p.Y + fe.ActualHeight < 0 || p.Y > w.ActualHeight) continue;   // scrolled out of view
+                if (p.Y < bestY - 0.5 || (Math.Abs(p.Y - bestY) <= 0.5 && p.X < bestX))
+                {
+                    best = fe; bestY = p.Y; bestX = p.X; isList = isContentList;
+                }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Move the selection from the section list onto its page. The page of a just-selected section is built a
+        /// moment later, so this retries briefly - but never once the pad has moved on or the mouse took over.
+        /// </summary>
+        private static void EnterContentSoon(Window w, FrameworkElement sidebar, int attempt)
+        {
+            if (attempt == 0) _holdTvi = null;      // the user asked to go into the page
+            try
+            {
+                var t = new System.Windows.Threading.DispatcherTimer
+                    { Interval = TimeSpan.FromMilliseconds(attempt == 0 ? 60 : 150) };
+                t.Tick += (s, e) =>
+                {
+                    t.Stop();
+                    try
+                    {
+                        if (w == null || !w.IsVisible || !PadInput.Active) return;
+                        var cur = FocusedIn(w);
+                        if (cur != null && !IsDescendantOf(cur, sidebar)) return;   // already moved on
+
+                        bool isList;
+                        var target = FindContentTarget(w, sidebar, out isList);
+                        if (target != null)
+                        {
+                            if (isList)
+                            {
+                                if (TryStartInList(w)) return;
+                            }
+                            else
+                            {
+                                FocusElement(target);
+                                var landed = FocusedIn(w);
+                                if (landed != null && !IsDescendantOf(landed, sidebar))
+                                {
+                                    ExitListMode();
+                                    Highlight(w);
+                                    return;
+                                }
+                            }
+                        }
+                        if (attempt < 6) EnterContentSoon(w, sidebar, attempt + 1);
+                        else { try { Breadcrumb.Write("PadSettings: no control found on the page next to the section list"); } catch { } }
+                    }
+                    catch { }
+                };
+                t.Start();
+            }
+            catch { }
+        }
+
+        private static string _branch = "";
+
+        /// <summary>Type, name, label, position, flags of a control - enough to recognise it in the log.</summary>
+        private static string Describe(DependencyObject d, Window w)
+        {
+            if (d == null) return "none";
+            try
+            {
+                var sb = new StringBuilder(d.GetType().Name);
+                var fe = d as FrameworkElement;
+                if (fe == null) return sb.ToString();
+                if (!string.IsNullOrEmpty(fe.Name)) sb.Append('#').Append(fe.Name);
+                var cc = fe as ContentControl;
+                string txt = cc != null ? cc.Content as string : null;
+                if (txt != null) sb.Append(" \"").Append(txt.Length > 30 ? txt.Substring(0, 30) : txt).Append('"');
+                var p = w != null ? DesktopControllerNav.GetPosition(fe, w) : new Point(double.NaN, double.NaN);
+                sb.Append(" @").Append(double.IsNaN(p.X) ? "?" : ((int)p.X) + "," + ((int)p.Y))
+                  .Append(' ').Append((int)fe.ActualWidth).Append('x').Append((int)fe.ActualHeight);
+                var btn = fe as Button;
+                if (btn != null && btn.IsDefault) sb.Append(" default");
+                if (btn != null && btn.IsCancel) sb.Append(" cancel");
+                if (!fe.IsEnabled) sb.Append(" disabled");
+                if (!fe.IsVisible) sb.Append(" hidden");
+                return sb.ToString();
+            }
+            catch { return d.GetType().Name; }
+        }
+
+        /// <summary>Containers above a control that restrict arrow / tab navigation: the usual reason WPF cannot leave a footer.</summary>
+        private static string NavChain(DependencyObject d)
+        {
+            var sb = new StringBuilder();
+            try
+            {
+                for (int i = 0; d != null && i < 40; i++)
+                {
+                    var dir = KeyboardNavigation.GetDirectionalNavigation(d);
+                    var tab = KeyboardNavigation.GetTabNavigation(d);
+                    var ctl = KeyboardNavigation.GetControlTabNavigation(d);
+                    if (dir != KeyboardNavigationMode.Continue || tab != KeyboardNavigationMode.Continue || ctl != KeyboardNavigationMode.Continue)
+                        sb.Append(d.GetType().Name).Append("[dir=").Append(dir).Append(",tab=").Append(tab).Append("] ");
+                    if (d is Window) break;
+                    d = VisualTreeHelper.GetParent(d);
+                }
+            }
+            catch { }
+            return sb.Length == 0 ? "(all Continue)" : sb.ToString().TrimEnd();
+        }
+
+        private static void TracedWindowAction(string name, Window w, Action core)
+        {
+            if (!Breadcrumb.Enabled) { core(); return; }
+            string before = "", title = "";
+            try { before = Describe(FocusedIn(w), w); title = w.Title; } catch { }
+            _branch = "";
+            long t0 = Stopwatch.GetTimestamp();
+            try { core(); }
+            finally
+            {
+                try
+                {
+                    double ms = (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
+                    string after = Describe(FocusedIn(w), w);
+                    Breadcrumb.Write("Pad " + name + " [" + w.GetType().Name + " \"" + title + "\"] " + ms.ToString("0.0") + "ms" + (ms > 40 ? " SLOW" : "") +
+                        " via=" + (_branch.Length == 0 ? "?" : _branch) +
+                        " | " + before + (before == after ? "  (focus unchanged)" : "  ->  " + after));
+                }
+                catch { }
+            }
+        }
+
+        public static void Move(Window w, FocusNavigationDirection dir) { TracedWindowAction("Move" + dir, w, () => MoveCore(w, dir)); }
+
+        private static void MoveCore(Window w, FocusNavigationDirection dir)
         {
             PadInput.NotePad();
             try
             {
                 // Cursor inside a long list: Up / Down step through the rows, Left / Right leave the list.
                 bool vert0 = dir == FocusNavigationDirection.Up || dir == FocusNavigationDirection.Down;
-                if (vert0 && ListModeMove(w, dir == FocusNavigationDirection.Down ? 1 : -1)) return;
-                if (!vert0 && ListModeActive(w)) { ExitListMode(); Highlight(w); return; }
+                if (vert0 && ListModeMove(w, dir == FocusNavigationDirection.Down ? 1 : -1)) { _branch = "list-mode-rows"; return; }
+                if (!vert0 && ListModeActive(w))
+                {
+                    ExitListMode();
+                    if (dir == FocusNavigationDirection.Left)
+                    {
+                        var sideFromList = FindSidebar(w);
+                        if (sideFromList != null && FocusSidebar(w, sideFromList)) return;
+                    }
+                    Highlight(w);
+                    return;
+                }
 
                 // Very first press in this window: start in the list, not on the header / buttons above it.
-                if (FirstTouchEnterList(w)) return;
+                if (FirstTouchEnterList(w)) { _branch = "first-touch-enter-list"; return; }
 
                 var f = FocusedIn(w);
-                if (f == null) { FocusTop(w); SelectFocused(w); Highlight(w); return; }
+                if (f == null) { _branch = "no-focus->FocusTop"; FocusTop(w); SelectFocused(w); Highlight(w); return; }
+
+                // A scroll area is not something to press. This window's content ScrollViewer is focusable, and WPF then
+                // bounced between it and the Save / Cancel buttons forever (Up from Save = scroll area, Down = Save).
+                // Make it non-focusable and go to a real control inside it.
+                var sv0 = f as ScrollViewer;
+                if (sv0 != null)
+                {
+                    sv0.Focusable = false;
+                    _branch = "leave-scrollviewer";
+                    if (FocusInsideScrollViewer(w, sv0, dir)) { SelectFocused(w); Highlight(w); return; }
+                }
 
                 bool vertical = dir == FocusNavigationDirection.Up || dir == FocusNavigationDirection.Down;
                 int sign = (dir == FocusNavigationDirection.Down || dir == FocusNavigationDirection.Right) ? 1 : -1;
@@ -3083,6 +3887,7 @@ namespace PlayniteGameOverlay
                 var combo = SelfOrParent<ComboBox>(f);
                 if (combo != null && combo.IsDropDownOpen)
                 {
+                    _branch = "open-combo";
                     if (vertical)
                     {
                         int n = combo.Items.Count;
@@ -3097,6 +3902,7 @@ namespace PlayniteGameOverlay
                 var slider = SelfOrParent<Slider>(f);
                 if (slider != null && !vertical)
                 {
+                    _branch = "slider";
                     double range = slider.Maximum - slider.Minimum;
                     double step = slider.SmallChange > 0 ? slider.SmallChange : range / 20.0;
                     if (step < range / 100.0) step = range / 100.0;
@@ -3109,6 +3915,16 @@ namespace PlayniteGameOverlay
                 if (tabItem != null && !vertical)
                 {
                     var tc = ItemsControl.ItemsControlFromItemContainer(tabItem) as TabControl;
+                    if (tc != null && tc.TabStripPlacement == Dock.Left)
+                    {
+                        // Vertical tab strip: Left / Right do not walk the tabs. Right goes into the page.
+                        var tabSide = SidebarRootOf(w, tabItem);
+                        if (tabSide != null)
+                        {
+                            if (sign > 0) EnterContentSoon(w, tabSide, 0);
+                            return;
+                        }
+                    }
                     if (tc != null)
                     {
                         int n = tc.Items.Count;
@@ -3119,12 +3935,33 @@ namespace PlayniteGameOverlay
                     }
                 }
 
-                // Tree items: Right expands, Left collapses (like the keyboard does).
+                // Tree items. Up / Down walk the visible entries one by one (directional focus search gives up at the
+                // edge of the visible part of a long tree, which left the pad stuck part-way down the section list).
+                // Right expands, Left collapses (like the keyboard does), Left on a child returns to its group.
                 var treeItem = f as TreeViewItem;
-                if (treeItem != null && !vertical && treeItem.HasItems)
+                if (treeItem != null)
                 {
-                    if (sign > 0 && !treeItem.IsExpanded) { treeItem.IsExpanded = true; return; }
-                    if (sign < 0 && treeItem.IsExpanded) { treeItem.IsExpanded = false; return; }
+                    _branch = "tree";
+                    if (vertical)
+                    {
+                        if (StepTree(w, treeItem, sign)) return;
+                    }
+                    else
+                    {
+                        if (treeItem.HasItems && sign > 0 && !treeItem.IsExpanded) { treeItem.IsExpanded = true; return; }
+                        if (treeItem.HasItems && sign < 0 && treeItem.IsExpanded) { treeItem.IsExpanded = false; return; }
+                        if (sign < 0)
+                        {
+                            var parentGroup = ItemsControl.ItemsControlFromItemContainer(treeItem) as TreeViewItem;
+                            if (parentGroup != null && DesktopControllerNav.IsUsable(parentGroup))
+                            {
+                                FocusElement(parentGroup);
+                                SelectFocused(w);
+                                Highlight(w);
+                                return;
+                            }
+                        }
+                    }
                 }
 
                 // Focus already on a row of the long list (clicked, or tabbed into): continue by rows.
@@ -3132,15 +3969,63 @@ namespace PlayniteGameOverlay
                 if (list != null && IsDescendantOf(f, list))
                 {
                     int row = IndexOfRow(list, f);
-                    if (row >= 0) { SetListRow(w, list, row + sign); return; }
+                    if (row >= 0) { _branch = "content-list-row"; SetListRow(w, list, row + sign); return; }
                 }
 
                 var ui = f as UIElement;
                 bool moved = false;
                 if (ui != null) moved = ui.MoveFocus(new TraversalRequest(dir));
+                _branch = moved ? "wpf-directional" : "wpf-directional(failed)";
+                if (moved)
+                {
+                    var landedSv = FocusedIn(w) as ScrollViewer;
+                    if (landedSv != null)
+                    {
+                        landedSv.Focusable = false;      // never land on the scroll area again
+                        _branch += "+skip-scrollviewer";
+                        if (vertical && FocusInsideScrollViewer(w, landedSv, dir)) { SelectFocused(w); Highlight(w); return; }
+                        if (!vertical) { FocusElement(f as FrameworkElement); moved = false; }   // sideways: stay where we were
+                    }
+                }
                 if (moved) SkipPanels(w, dir);
+
+                // Section list on the left, page on the right: WPF never lets directional focus leave the list, so
+                // Right hands over to the page and Left (when nothing is further left) returns to the list.
+                if (!vertical && !moved)
+                {
+                    if (sign > 0)
+                    {
+                        FrameworkElement sideRoot = SidebarRootOf(w, f);
+                        if (sideRoot == null && f is TreeViewItem) sideRoot = DesktopControllerNav.FindVisualParent<TreeView>(f);
+                        if (sideRoot != null) { EnterContentSoon(w, sideRoot, 0); return; }
+                    }
+                    else if (SidebarRootOf(w, f) == null)
+                    {
+                        var sideBack = FindSidebar(w);
+                        if (sideBack != null && FocusSidebar(w, sideBack)) return;
+                    }
+                }
+
+                // WPF's directional search gives up in several layouts (footer buttons in a container with
+                // DirectionalNavigation=Contained, content in a ScrollViewer ...). Pick the nearest control by position.
+                if (!moved || ReferenceEquals(FocusedIn(w), f))
+                {
+                    var stuckEl = f as FrameworkElement;
+                    if (stuckEl != null && FocusNearest(w, stuckEl, dir)) { _branch += "+nearest"; SelectFocused(w); Highlight(w); return; }
+                    _branch += "+nearest(none)";
+                    if (Breadcrumb.Enabled)
+                    {
+                        try
+                        {
+                            Breadcrumb.Write("PadMove: STUCK dir=" + dir + " on " + Describe(f, w) + " in \"" + w.Title + "\" | nav restrictions above it: " + NavChain(f) +
+                                " | scrollable=" + DesktopControllerNav.FindVisualChildren<ScrollViewer>(w).Count(v => DesktopControllerNav.IsUsable(v) && v.ScrollableHeight > 0));
+                        }
+                        catch { }
+                    }
+                }
+
                 if (list != null && TryEnterList(w, list, f, moved, dir)) return;
-                if (!moved && vertical) ScrollFallback(w, sign);
+                if (!moved && vertical) { _branch += "+scroll-fallback"; ScrollFallback(w, sign); }
                 else if (!moved && !vertical && ui is FrameworkElement && !DesktopControllerNav.IsUsable((FrameworkElement)ui))
                     FocusTop(w);
 
@@ -3150,7 +4035,9 @@ namespace PlayniteGameOverlay
             catch { }
         }
 
-        public static void Confirm(Window w)
+        public static void Confirm(Window w) { TracedWindowAction("Confirm", w, () => ConfirmCore(w)); }
+
+        private static void ConfirmCore(Window w)
         {
             PadInput.NotePad();
             try
@@ -3170,13 +4057,32 @@ namespace PlayniteGameOverlay
                 if (ex != null) { ex.IsExpanded = !ex.IsExpanded; return; }
 
                 var tab = f as TabItem;
-                if (tab != null) { tab.IsSelected = true; return; }
+                if (tab != null)
+                {
+                    tab.IsSelected = true;
+                    var tabSide = SidebarRootOf(w, tab);          // a tab strip on the left: A opens the page
+                    if (tabSide != null) EnterContentSoon(w, tabSide, 0);
+                    return;
+                }
 
                 var tvi = f as TreeViewItem;
                 if (tvi != null)
                 {
                     tvi.IsSelected = true;
-                    if (tvi.HasItems) tvi.IsExpanded = !tvi.IsExpanded;
+                    // Playnite's settings tree opens a page from mouse input, which IsSelected alone does not reproduce.
+                    if (!ReferenceEquals(_lastSelectedTvi, tvi))
+                    {
+                        _lastSelectedTvi = tvi;
+                        DesktopControllerNav.Defer(() => ClickLikeMouse(tvi));
+                    }
+                    if (tvi.HasItems) tvi.IsExpanded = !tvi.IsExpanded;     // a group of sections: open / close it
+                    else
+                    {
+                        // A section: A moves the selection onto its page, where the settings are.
+                        // A tree that is not recognised as a "sidebar" (wide, or not at the far left) used to do nothing here.
+                        FrameworkElement treeSide = SidebarRootOf(w, tvi) ?? DesktopControllerNav.FindVisualParent<TreeView>(tvi);
+                        if (treeSide != null) EnterContentSoon(w, treeSide, 0);
+                    }
                     return;
                 }
 
@@ -3201,7 +4107,9 @@ namespace PlayniteGameOverlay
             catch { }
         }
 
-        public static void Back(Window w)
+        public static void Back(Window w) { TracedWindowAction("Back", w, () => BackCore(w)); }
+
+        private static void BackCore(Window w)
         {
             PadInput.NotePad();
             try
@@ -3221,9 +4129,12 @@ namespace PlayniteGameOverlay
         }
 
         /// <summary>LB / RB: previous / next section header, or previous / next tab when there are no sections.</summary>
-        public static void Section(Window w, int delta)
+        public static void Section(Window w, int delta) { TracedWindowAction(delta > 0 ? "SectionNext" : "SectionPrev", w, () => SectionCore(w, delta)); }
+
+        private static void SectionCore(Window w, int delta)
         {
             PadInput.NotePad();
+            _holdTvi = null;
             try
             {
                 if (ListPage(w, delta)) return;
@@ -3259,9 +4170,12 @@ namespace PlayniteGameOverlay
         }
 
         /// <summary>LT: back to the top. RT: down to the Save / default button (or the last control).</summary>
-        public static void Jump(Window w, bool toBottom)
+        public static void Jump(Window w, bool toBottom) { TracedWindowAction(toBottom ? "JumpBottom" : "JumpTop", w, () => JumpCore(w, toBottom)); }
+
+        private static void JumpCore(Window w, bool toBottom)
         {
             PadInput.NotePad();
+            _holdTvi = null;
             try
             {
                 ExitListMode();

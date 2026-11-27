@@ -1807,7 +1807,8 @@ namespace PlayniteGameOverlay
             _borderlessPid = pid;
             _borderlessLog = log;
             _borderlessTicks = 0;
-            lock (_borderlessApplied) _borderlessApplied.Clear();
+            lock (_borderlessApplied) { _borderlessApplied.Clear(); _borderlessLastApply.Clear(); }
+            _borderlessLastNote = null;
             _borderlessTimer = new Timer(BorderlessTick, null, 1500, 1500);
         }
 
@@ -1842,7 +1843,12 @@ namespace PlayniteGameOverlay
                 }
 
                 IntPtr hwnd = FindMainWindow(pid);
-                if (hwnd != IntPtr.Zero && MakeBorderless(hwnd))
+                if (hwnd == IntPtr.Zero)
+                {
+                    if (_borderlessLastNote != "Borderless: no game window found yet")
+                    { _borderlessLastNote = "Borderless: no game window found yet"; _borderlessLog?.Invoke(_borderlessLastNote); }
+                }
+                else if (MakeBorderless(hwnd))
                     _borderlessLog?.Invoke("Borderless fullscreen applied to game window.");
             }
             catch { /* best-effort */ }
@@ -1850,9 +1856,31 @@ namespace PlayniteGameOverlay
         }
 
         /// <summary>
-        /// Strip frame styles and cover the monitor. Only touches normal captioned top-level windows;
-        /// windows that are already borderless, minimized or exclusive-fullscreen are left alone.
+        /// Strip frame styles and cover the monitor. Touches normal captioned top-level windows, plus
+        /// captionless windows that are only maximized / work-area sized (taskbar still showing);
+        /// deliberately smaller borderless windows, minimized and exclusive-fullscreen ones are left alone.
         /// </summary>
+        private static string _borderlessLastNote;
+        private static readonly Dictionary<long, DateTime> _borderlessLastApply = new Dictionary<long, DateTime>();
+
+        /// <summary>Why a window was (not) made borderless. Only written when it changes, so the log shows the reason without spam.</summary>
+        private static void BorderlessNote(IntPtr hwnd, string what)
+        {
+            try
+            {
+                var cls = new StringBuilder(128);
+                GetClassName(hwnd, cls, cls.Capacity);
+                WinRect r; GetWindowRect(hwnd, out r);
+                string msg = "Borderless: " + what + " | hwnd=0x" + hwnd.ToInt64().ToString("X") + " class=" + cls +
+                             " rect=" + r.Left + "," + r.Top + " " + (r.Right - r.Left) + "x" + (r.Bottom - r.Top) +
+                             " style=0x" + GetWindowLongInt(hwnd, GWL_STYLE).ToString("X");
+                if (msg == _borderlessLastNote) return;
+                _borderlessLastNote = msg;
+                _borderlessLog?.Invoke(msg);
+            }
+            catch { }
+        }
+
         public static bool MakeBorderless(IntPtr hwnd)
         {
             try
@@ -1861,24 +1889,65 @@ namespace PlayniteGameOverlay
 
                 int style = GetWindowLongInt(hwnd, GWL_STYLE);
                 int ex = GetWindowLongInt(hwnd, GWL_EXSTYLE);
-                if ((style & WS_CHILD) != 0 || (ex & WS_EX_TOOLWINDOW) != 0) return false;
-                if ((style & (WS_CAPTION | WS_THICKFRAME)) == 0) return false; // already borderless
-
-                // Avoid fighting a game that keeps restoring its frame.
-                long key = hwnd.ToInt64();
-                lock (_borderlessApplied)
-                {
-                    int n;
-                    _borderlessApplied.TryGetValue(key, out n);
-                    if (n >= 8) return false;
-                    _borderlessApplied[key] = n + 1;
-                }
+                if ((style & WS_CHILD) != 0 || (ex & WS_EX_TOOLWINDOW) != 0) { BorderlessNote(hwnd, "skipped (child / tool window)"); return false; }
 
                 IntPtr mon = MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
                 var mi = new MonitorInfoEx { cbSize = Marshal.SizeOf(typeof(MonitorInfoEx)) };
                 if (mon == IntPtr.Zero || !GetMonitorInfo(mon, ref mi)) return false;
 
-                if (IsZoomed(hwnd)) ShowWindow(hwnd, SW_RESTORE);
+                bool hasFrame = (style & (WS_CAPTION | WS_THICKFRAME)) != 0;
+                if (!hasFrame)
+                {
+                    // Already captionless. Only step in when it is maximized / sized to the work area
+                    // (the taskbar stays visible and the game never reaches true fullscreen).
+                    // A captionless window that is deliberately smaller is left alone.
+                    WinRect r;
+                    if (!GetWindowRect(hwnd, out r)) return false;
+                    bool coversMonitor = r.Left <= mi.rcMonitor.Left && r.Top <= mi.rcMonitor.Top &&
+                                         r.Right >= mi.rcMonitor.Right && r.Bottom >= mi.rcMonitor.Bottom;
+                    if (coversMonitor)
+                    {
+                        // It stuck: forget the failed attempts, so a later re-maximize is answered immediately.
+                        lock (_borderlessApplied) { _borderlessApplied.Remove(hwnd.ToInt64()); _borderlessLastApply.Remove(hwnd.ToInt64()); }
+                        BorderlessNote(hwnd, "already covers the monitor");
+                        return false;
+                    }
+                    bool matchesWorkArea =
+                        Math.Abs(r.Left - mi.rcWork.Left) <= 2 && Math.Abs(r.Top - mi.rcWork.Top) <= 2 &&
+                        Math.Abs(r.Right - mi.rcWork.Right) <= 2 && Math.Abs(r.Bottom - mi.rcWork.Bottom) <= 2;
+                    // Windows that reach the whole work area but not the taskbar strip (maximized frameworks add a few px
+                    // of overhang, DPI rounding ...): the taskbar stays on top of them, so they count as "work-area sized".
+                    bool coversWorkArea =
+                        r.Left <= mi.rcWork.Left + 2 && r.Top <= mi.rcWork.Top + 2 &&
+                        r.Right >= mi.rcWork.Right - 2 && r.Bottom >= mi.rcWork.Bottom - 2;
+                    if (!IsZoomed(hwnd) && !matchesWorkArea && !coversWorkArea) { BorderlessNote(hwnd, "left alone (captionless, smaller than the work area)"); return false; }
+                }
+
+                // A game that keeps undoing the change (an emulator still loading, re-laying out its window) is not
+                // fought at full speed: every undone attempt doubles the wait before the next one (1.5 s, 3 s, 6 s ...
+                // up to 30 s). It never gives up for good - once the game settles, the next attempt sticks.
+                long key = hwnd.ToInt64();
+                int attemptNo;
+                lock (_borderlessApplied)
+                {
+                    int n;
+                    _borderlessApplied.TryGetValue(key, out n);
+                    DateTime last;
+                    if (_borderlessLastApply.TryGetValue(key, out last))
+                    {
+                        double waitSec = n <= 0 ? 0 : Math.Min(30.0, 1.5 * Math.Pow(2, n - 1));
+                        if ((DateTime.UtcNow - last).TotalSeconds < waitSec) return false;
+                    }
+                    _borderlessApplied[key] = n + 1;
+                    _borderlessLastApply[key] = DateTime.UtcNow;
+                    attemptNo = n;
+                }
+
+                // A maximized window can simply be placed over the whole monitor: Windows allows it, and the shell hides
+                // the taskbar for a captionless window that covers the monitor. Sending SW_RESTORE first made Qt-based
+                // emulators (Eden / Yuzu forks ...) re-maximize themselves right away, undoing the change every time
+                // (breadcrumbs: "applied" x8, then "gave up"). Restoring stays as the fallback for windows that resist.
+                if (IsZoomed(hwnd) && attemptNo >= 3) ShowWindow(hwnd, SW_RESTORE);
 
                 style &= ~(WS_CAPTION | WS_THICKFRAME | WS_SYSMENU | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
                 ex &= ~(WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE);
@@ -1890,6 +1959,7 @@ namespace PlayniteGameOverlay
                 int h = mi.rcMonitor.Bottom - mi.rcMonitor.Top;
                 SetWindowPos(hwnd, IntPtr.Zero, x, y, w, h,
                     SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                BorderlessNote(hwnd, "applied -> " + w + "x" + h + " at " + x + "," + y);
                 return true;
             }
             catch { return false; }
@@ -2397,41 +2467,154 @@ namespace PlayniteGameOverlay
     /// Tiny always-on trace (one line per important event) in the extension's data folder.
     /// Survives hard crashes, so the last lines show what the extension was doing.
     /// </summary>
+    /// <summary>
+    /// Finds UI-thread stalls (the "lags for a while after Playnite starts" kind): a 50 ms timer that notices when it
+    /// fires much later than due, and Time() to measure the work of the extension's own timers.
+    /// </summary>
+    internal static class StallProbe
+    {
+        private static System.Windows.Threading.DispatcherTimer _timer;
+        private static long _last;
+        private static long _started;
+
+        public static void Start()
+        {
+            try
+            {
+                if (_timer != null || !Breadcrumb.Enabled) return;
+                _started = _last = Stopwatch.GetTimestamp();
+                _timer = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.Normal)
+                    { Interval = TimeSpan.FromMilliseconds(50) };
+                _timer.Tick += (s, e) =>
+                {
+                    long now = Stopwatch.GetTimestamp();
+                    double lateMs = (now - _last) * 1000.0 / Stopwatch.Frequency - 50;
+                    _last = now;
+                    if (lateMs > 120)
+                        Breadcrumb.Write("UiStall: UI thread was busy for ~" + lateMs.ToString("0") + " ms (" +
+                            ((now - _started) / (double)Stopwatch.Frequency).ToString("0.0") + " s after startup)");
+                };
+                _timer.Start();
+            }
+            catch { }
+        }
+
+        /// <summary>Runs the action and logs it when it took 15 ms or more.</summary>
+        public static void Time(string name, Action action)
+        {
+            long t0 = Stopwatch.GetTimestamp();
+            try { action(); }
+            finally
+            {
+                try
+                {
+                    double ms = (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
+                    if (ms >= 15) Breadcrumb.Throttled("slow-" + name, 500, "SlowWork: " + name + " took " + ms.ToString("0") + " ms");
+                }
+                catch { }
+            }
+        }
+    }
+
     internal static class Breadcrumb
     {
         private static readonly object Gate = new object();
+        private static readonly System.Collections.Concurrent.ConcurrentQueue<string> Pending =
+            new System.Collections.Concurrent.ConcurrentQueue<string>();
+        private static readonly System.Collections.Generic.Dictionary<string, long> ThrottleTicks =
+            new System.Collections.Generic.Dictionary<string, long>();
+        private static readonly AutoResetEvent Wake = new AutoResetEvent(false);
+        private static Thread _writer;
         public static string DirectoryPath;
 
         /// <summary>Turned off from the settings ("Write diagnostic log").</summary>
         public static volatile bool Enabled = false;
 
+        /// <summary>
+        /// Queues one line. The file is written by a background thread, so tracing no longer does disk I/O on the UI
+        /// thread (it used to, once per line, which itself added to the lag it was meant to explain).
+        /// </summary>
         public static void Write(string message)
         {
             try
             {
                 if (!Enabled) return;
-                string dir = DirectoryPath;
-                if (string.IsNullOrEmpty(dir)) return;
-                lock (Gate)
-                {
-                    System.IO.Directory.CreateDirectory(dir);
-                    string path = System.IO.Path.Combine(dir, "breadcrumbs.log");
-                    try
-                    {
-                        var fi = new System.IO.FileInfo(path);
-                        if (fi.Exists && fi.Length > 256 * 1024)
-                        {
-                            System.IO.File.Copy(path, path + ".old", true);
-                            System.IO.File.Delete(path);
-                        }
-                    }
-                    catch { }
-                    System.IO.File.AppendAllText(path,
-                        DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + " [t" +
-                        System.Threading.Thread.CurrentThread.ManagedThreadId + "] " + message + "\r\n");
-                }
+                if (string.IsNullOrEmpty(DirectoryPath)) return;
+                if (Pending.Count > 20000) return;   // writer is stuck: drop rather than grow
+                Pending.Enqueue(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + " [t" +
+                    Thread.CurrentThread.ManagedThreadId + "] " + message + "\r\n");
+                EnsureWriter();
+                Wake.Set();
             }
             catch { /* tracing must never throw */ }
+        }
+
+        /// <summary>Like Write, but at most once per intervalMs for the same key (the rest are counted and skipped).</summary>
+        public static void Throttled(string key, int intervalMs, string message)
+        {
+            try
+            {
+                if (!Enabled) return;
+                long now = Stopwatch.GetTimestamp();
+                lock (ThrottleTicks)
+                {
+                    long last;
+                    if (ThrottleTicks.TryGetValue(key, out last) &&
+                        (now - last) * 1000.0 / Stopwatch.Frequency < intervalMs) return;
+                    ThrottleTicks[key] = now;
+                }
+                Write(message);
+            }
+            catch { }
+        }
+
+        /// <summary>Writes everything queued so far (call before the process exits).</summary>
+        public static void Flush()
+        {
+            try { Drain(); } catch { }
+        }
+
+        private static void EnsureWriter()
+        {
+            if (_writer != null) return;
+            lock (Gate)
+            {
+                if (_writer != null) return;
+                _writer = new Thread(() =>
+                {
+                    while (true)
+                    {
+                        try { Wake.WaitOne(300); Drain(); } catch { }
+                    }
+                }) { IsBackground = true, Name = "BreadcrumbWriter" };
+                _writer.Start();
+            }
+        }
+
+        private static void Drain()
+        {
+            lock (Gate)
+            {
+                if (Pending.IsEmpty) return;
+                string dir = DirectoryPath;
+                if (string.IsNullOrEmpty(dir)) return;
+                var sb = new StringBuilder();
+                string line;
+                while (Pending.TryDequeue(out line)) sb.Append(line);
+                System.IO.Directory.CreateDirectory(dir);
+                string path = System.IO.Path.Combine(dir, "breadcrumbs.log");
+                try
+                {
+                    var fi = new System.IO.FileInfo(path);
+                    if (fi.Exists && fi.Length > 2 * 1024 * 1024)   // was 256 KB: the PCGW lines alone filled that
+                    {
+                        System.IO.File.Copy(path, path + ".old", true);
+                        System.IO.File.Delete(path);
+                    }
+                }
+                catch { }
+                System.IO.File.AppendAllText(path, sb.ToString());
+            }
         }
     }
 }

@@ -50,6 +50,7 @@ namespace PlayniteGameOverlay
         private readonly Action _onRtDesktop;
         private readonly Action _onAnyPadActivity;
         private readonly Action _onSquare;
+        private readonly Action _onStart;
 
         /// <summary>Raised every poll with the buttons currently held (see <see cref="PadButtons"/>).</summary>
         public event Action<int> MaskPolled;
@@ -63,6 +64,8 @@ namespace PlayniteGameOverlay
         private bool _prevA;
         private bool _prevB;
         private bool _prevSquare;
+        private bool _prevStart;
+        private bool _startComboUsed;   // Back was pressed while Start was held: that is the overlay shortcut, not a Start press
         private bool _prevLb;
         private bool _prevRb;
         private bool _prevLt;
@@ -118,9 +121,11 @@ namespace PlayniteGameOverlay
             Action onRbDesktop = null,
             Action onLtDesktop = null,
             Action onRtDesktop = null,
-            Action onSquare = null)
+            Action onSquare = null,
+            Action onStart = null)
         {
             _onSquare = onSquare;
+            _onStart = onStart;
             _onLtDesktop = onLtDesktop;
             _onRtDesktop = onRtDesktop;
             _onLbDesktop = onLbDesktop;
@@ -146,8 +151,11 @@ namespace PlayniteGameOverlay
             };
             _timer.Tick += (_, __) =>
             {
+                long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
                 try { PollOnce(); }
                 catch { /* ignore */ }
+                double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                if (ms > 25) Breadcrumb.Throttled("poll-slow", 1000, "PadPoll: slow tick " + ms.ToString("0") + " ms (timer interval " + _timer.Interval.TotalMilliseconds + " ms)");
             };
         }
 
@@ -189,6 +197,7 @@ namespace PlayniteGameOverlay
             _prevGuide = false;
             _prevUp = _prevDown = _prevLeft = _prevRight = false;
             _prevA = _prevB = _prevSquare = false;
+            _prevStart = false; _startComboUsed = false;
             _prevLb = _prevRb = _prevLt = _prevRt = false;
             _upHeldSince = _downHeldSince = _leftHeldSince = _rightHeldSince = DateTime.MinValue;
             _lastUpRepeat = _lastDownRepeat = _lastLeftRepeat = _lastRightRepeat = DateTime.MinValue;
@@ -319,6 +328,7 @@ namespace PlayniteGameOverlay
             if (ControllerHotkeys.CaptureActive)
             {
                 _prevA = a; _prevB = b; _prevSquare = square;
+                _prevStart = start; _startComboUsed = false;
                 _prevLb = lb; _prevRb = rb; _prevLt = lt; _prevRt = rt;
                 _prevStartBack = start && back; _prevGuide = guide;
                 _prevUp = up; _prevDown = down; _prevLeft = left; _prevRight = right;
@@ -351,6 +361,11 @@ namespace PlayniteGameOverlay
             bool bPress = b && !_prevB;
             bool squarePress = square && !_prevSquare;
             _prevSquare = square;
+            // Start on its own acts when it is released, so Start + Back (the overlay shortcut) never also counts as Start.
+            if (start && back) _startComboUsed = true;
+            bool startAloneRelease = !start && _prevStart && !_startComboUsed;
+            if (!start) _startComboUsed = false;
+            _prevStart = start;
             bool lbPress = lb && !_prevLb;
             bool rbPress = rb && !_prevRb;
             bool ltPress = lt && !_prevLt;
@@ -384,6 +399,7 @@ namespace PlayniteGameOverlay
             if (aPress) Safe(_onA);
             if (bPress) Safe(_onB);
             if (squarePress) Safe(_onSquare);
+            if (startAloneRelease) Safe(_onStart);
 
             bool overlayOpen = false;
             try { overlayOpen = _isOverlayOpen(); } catch { }
@@ -439,8 +455,8 @@ namespace PlayniteGameOverlay
 
             if ((now - heldSince) >= RepeatDelay && (now - lastRepeat) >= RepeatInterval)
             {
-                lastRepeat = now;
                 Safe(action);
+                lastRepeat = DateTime.UtcNow;   // from the end of the step: a slow step must not be followed by an instant one
             }
         }
 

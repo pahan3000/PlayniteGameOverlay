@@ -53,6 +53,12 @@ namespace PlayniteGameOverlay
         private const string RepoName = "PlayniteGameOverlay";
         private const string DisplayName = "Playnite Overlay 3000";
 
+        /// <summary>GitHub redirects this address to the newest published release.</summary>
+        public static string LatestReleasePageUrl
+        {
+            get { return "https://github.com/" + RepoOwner + "/" + RepoName + "/releases/latest"; }
+        }
+
         private static string _statePath;
         private static readonly object _stateLock = new object();
 
@@ -208,10 +214,8 @@ namespace PlayniteGameOverlay
                     return result;
                 }
 
-                var page = Regex.Match(body, "\"html_url\"\\s*:\\s*\"([^\"]+)\"");
-                result.ReleaseUrl = page.Success
-                    ? page.Groups[1].Value.Replace("\\/", "/")
-                    : "https://github.com/" + RepoOwner + "/" + RepoName + "/releases/latest";
+                // Always send people to the repository's "latest release" page (GitHub redirects it to the newest release).
+                result.ReleaseUrl = LatestReleasePageUrl;
                 result.LatestVersion = latest.ToString();
                 result.UpdateAvailable = current != null && latest > current;
                 result.Success = true;
@@ -314,9 +318,10 @@ namespace PlayniteGameOverlay
                 }
                 else if (r.UpdateAvailable)
                 {
-                    UpdateStatusText.Text = "Version " + r.LatestVersion + " is available.";
+                    UpdateStatusText.Text = "Version " + r.LatestVersion + " is available. Opening the download page…";
                     UpdateOpenButton.Tag = r.ReleaseUrl;
                     UpdateOpenButton.Visibility = Visibility.Visible;
+                    UpdateChecker.OpenUrl(r.ReleaseUrl);   // the person pressed "Check": take them straight to the latest release
                 }
                 else
                 {

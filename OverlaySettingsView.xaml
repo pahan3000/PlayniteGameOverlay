@@ -1403,7 +1403,7 @@
           <Border Style="{StaticResource SettingRowLast}">
             <DockPanel>
               <ComboBox DockPanel.Dock="Right" Width="180" VerticalAlignment="Center" SelectedValuePath="Tag" SelectedValue="{Binding UpdateCheckMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
-                <ComboBoxItem Content="Check on every start" Tag="Start"/>
+                <ComboBoxItem Content="Check on launch" Tag="Start"/>
                 <ComboBoxItem Content="Check daily" Tag="Daily"/>
                 <ComboBoxItem Content="Check weekly" Tag="Weekly"/>
                 <ComboBoxItem Content="Check monthly" Tag="Monthly"/>

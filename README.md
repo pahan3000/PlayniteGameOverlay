@@ -4,7 +4,6 @@ An in-game overlay for [Playnite](https://playnite.link), usable with keyboard o
 
 It also adds a set of quality-of-life tools to Playnite itself: faster game launching, automatic metadata and links, save-folder shortcuts, controller navigation, and a cleaner uninstall.
 
-**MADE WITH AI. Low effort piece of rubbish.**
 
 ---
 
@@ -123,6 +122,16 @@ A **Complete uninstall** option in the game menu runs the normal launcher uninst
 2. Drag it onto the Playnite window, or double-click it, and confirm.
 3. Restart Playnite.
 4. Open the settings via **Add-ons → Extensions → Generic → Playnite Overlay 3000**.
+
+### Optional companions
+
+| Extension | Used for |
+| --- | --- |
+| [PlayniteAchievements](https://github.com/justin-delano/PlayniteAchievements) | Achievement panel (preferred source) |
+| SuccessStory | Achievement panel (fallback) |
+| [FPS Limiter 3000](https://github.com/pahan3000/fps-limiter-3000) | FPS limiter panel |
+| RivaTuner Statistics Server (RTSS) | Frame limiting backend |
+| Vortex | Vortex link and mod leftover cleanup |
 
 ## Building from source
 

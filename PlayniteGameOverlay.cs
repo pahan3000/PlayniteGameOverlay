@@ -367,9 +367,12 @@ namespace PlayniteGameOverlay
             try
             {
                 Breadcrumb.DirectoryPath = GetPluginUserDataPath();
-                Breadcrumb.Write("---- Playnite started, overlay extension loaded ----");
+                Breadcrumb.Write("---- Playnite started, overlay extension loaded ---- (nav-trace build 2026-11-27d)");
+                StallProbe.Start();
             }
             catch { }
+            var startupClock = Stopwatch.StartNew();
+            Action<string> startupMark = name => Breadcrumb.Write("Startup: " + name + " done at +" + startupClock.ElapsedMilliseconds + " ms");
 
             // A previous session may have ended before the original fullscreen-optimization values were restored.
             try { WindowHelper.RestoreFakeFullscreen(FakeFullscreenBackupPath()); } catch { }
@@ -388,7 +391,9 @@ namespace PlayniteGameOverlay
                 catch { /* ignore */ }
             };
             WireOverlayFpsIntegration(overlayWindow);
+            startupMark("overlay window created");
             overlayWindow.Prewarm();
+            startupMark("overlay Prewarm");
             overlayWindow.Hide();
 
             // Set up show Playnite handler
@@ -403,7 +408,7 @@ namespace PlayniteGameOverlay
             {
                 Interval = TimeSpan.FromSeconds(3)
             };
-            gameHotkeyPidTimer.Tick += (sender, e) => RefreshGameHotkeyPid();
+            gameHotkeyPidTimer.Tick += (sender, e) => StallProbe.Time("RefreshGameHotkeyPid", RefreshGameHotkeyPid);
             gameHotkeyPidTimer.Start();
             RefreshGameHotkeyPid();
 
@@ -413,7 +418,7 @@ namespace PlayniteGameOverlay
             {
                 Interval = TimeSpan.FromMilliseconds(200)
             };
-            masterVolumeFocusTimer.Tick += (sender, e) => TrackGameMasterVolumeFocus();
+            masterVolumeFocusTimer.Tick += (sender, e) => StallProbe.Time("TrackGameMasterVolumeFocus", TrackGameMasterVolumeFocus);
             masterVolumeFocusTimer.Start();
             TrackGameMasterVolumeFocus();
 
@@ -437,6 +442,7 @@ namespace PlayniteGameOverlay
             cursorAutoHide = new CursorAutoHide(
                 () => Settings?.HideCursorOnGamepad != false && !WindowHelper.IsParked && IsCursorHideContext());
             cursorAutoHide.Start();
+            startupMark("timers + cursor hide");
 
 
             xInputPoller = new XInputPoller(
@@ -460,8 +466,10 @@ namespace PlayniteGameOverlay
                 onRbDesktop: () => { if (TryPadSettings(w => SettingsPadNav.Section(w, 1))) return; HandlePadTopBar(1); },
                 onLtDesktop: () => { if (TryPadSettings(w => SettingsPadNav.Jump(w, false))) return; HandlePadTopBarJump(-1); },
                 onRtDesktop: () => { if (TryPadSettings(w => SettingsPadNav.Jump(w, true))) return; HandlePadTopBarJump(1); },
-                onSquare: () => HandlePadSquare());
+                onSquare: () => HandlePadSquare(),
+                onStart: () => HandlePadStart());
             xInputPoller.Start();
+            startupMark("input pollers started");
 
             // User-defined controller hotkeys (settings: Hotkeys > Controller). Overlay works any time;
             // the others only while a game is running.
@@ -713,7 +721,8 @@ namespace PlayniteGameOverlay
                 {
                     try
                     {
-                        var w = GetPadSettingsWindow();
+                        System.Windows.Window w = null;
+                        StallProbe.Time("GetPadSettingsWindow(watch)", () => { w = GetPadSettingsWindow(); });
                         if (w == null) { _padInitWindow = null; return; }
                         if (ReferenceEquals(w, _padInitWindow)) return;
                         if ((DateTime.UtcNow - _lastPadActivityUtc).TotalSeconds > 8) return;   // opened with mouse/keyboard
@@ -729,6 +738,10 @@ namespace PlayniteGameOverlay
         }
 
         private string _lastPadRouteLog;
+        // The dialog the pad last drove. After an alt-tab Windows can hand the focus to the library window while that
+        // dialog is still open; the pad then silently drove the game list. See GetPadSettingsWindow.
+        private System.Windows.Window _lastPadDialog;
+        private DateTime _lastPadDialogUtc = DateTime.MinValue;
 
         /// <summary>Writes a routing decision to breadcrumbs.log, only when it changes (the pad polls at 60 Hz).</summary>
         private void LogPadRoute(string message)
@@ -746,6 +759,9 @@ namespace PlayniteGameOverlay
         {
             [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr hWnd);
             [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
+            [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+            [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int maxCount);
+            [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder text, int maxCount);
             public const uint GW_OWNER = 4;
         }
 
@@ -776,7 +792,7 @@ namespace PlayniteGameOverlay
                 if (IsOverlayNavActive()) return null;
                 if (!DesktopControllerNav.IsPlayniteDesktopForeground())
                 {
-                    LogPadRoute("skip: foreground is not Playnite Desktop (process " + System.Diagnostics.Process.GetCurrentProcess().ProcessName + ")");
+                    LogPadRoute("skip: foreground is not Playnite Desktop - " + DescribeForeground(fg));
                     return null;
                 }
 
@@ -798,7 +814,7 @@ namespace PlayniteGameOverlay
                 foreach (var w in windows)
                 {
                     var h = new System.Windows.Interop.WindowInteropHelper(w).Handle;
-                    if (h != IntPtr.Zero && h != fg && !PadNative.IsWindowEnabled(h)) { someWindowDisabled = true; break; }
+                    if (h != IntPtr.Zero && !PadNative.IsWindowEnabled(h)) { someWindowDisabled = true; break; }   // includes the foreground window: after alt-tab it can be the disabled library window
                 }
 
                 var seen = new System.Text.StringBuilder();
@@ -816,12 +832,63 @@ namespace PlayniteGameOverlay
                     // window is recognised by having no owner and nothing disabled beneath it.
                     if (main == null && !owned && !someWindowDisabled) continue;
                     LogPadRoute("dialog window " + w.GetType().FullName + " \"" + w.Title + "\"");
+                    _lastPadDialog = w; _lastPadDialogUtc = DateTime.UtcNow;
                     return w;
+                }
+
+                // A modal window (Playnite settings, add-ons, an extension's window ...) is open - the library window below
+                // it is disabled - but the focus sits on something of Playnite's that is not a window (a closed dropdown,
+                // a popup, a tooltip). The pad used to fall through to the game list. Bring the dialog back and keep
+                // driving it. Only while the pad is being used, and only when Playnite itself holds the focus.
+                // A dialog the pad was driving a moment ago that is still open (e.g. not modal, or after an alt-tab) also
+                // keeps the pad: it ends when the dialog is closed (B closes it).
+                bool lastDialogOpen = _lastPadDialog != null && _lastPadDialog.IsVisible && !ReferenceEquals(_lastPadDialog, main) &&
+                    _lastPadDialog.WindowState != System.Windows.WindowState.Minimized &&
+                    (DateTime.UtcNow - _lastPadDialogUtc).TotalSeconds < 120;
+                if (!lastDialogOpen) _lastPadDialog = null;
+                if ((someWindowDisabled || lastDialogOpen) && (DateTime.UtcNow - _lastPadActivityUtc).TotalSeconds < 3)
+                {
+                    System.Windows.Window modal = null;
+                    foreach (var w in windows)
+                    {
+                        if (ReferenceEquals(w, main) || ReferenceEquals(w, overlayWindow)) continue;
+                        if (w.GetType().Assembly == ownAssembly) continue;
+                        if (w.WindowState == System.Windows.WindowState.Minimized) continue;
+                        var h = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                        if (h == IntPtr.Zero || !PadNative.IsWindowEnabled(h)) continue;
+                        modal = w;   // the newest enabled window is the top-most dialog
+                    }
+                    if (lastDialogOpen && (modal == null || !someWindowDisabled)) modal = _lastPadDialog;
+                    if (modal != null)
+                    {
+                        _lastPadDialog = modal; _lastPadDialogUtc = DateTime.UtcNow;
+                        try { modal.Activate(); modal.Focus(); } catch { }
+                        LogPadRoute("refocused modal window " + modal.GetType().Name + " \"" + modal.Title + "\" (focus was on " + DescribeForeground(fg) + ")");
+                        return modal;
+                    }
                 }
                 LogPadRoute("library/main (no dialog matched). windows: " + seen);
             }
             catch (Exception ex) { LogPadRoute("error: " + ex.Message); }
             return null;
+        }
+
+        /// <summary>Process, class and title of a window, for the routing log (who took the focus away).</summary>
+        private static string DescribeForeground(IntPtr hwnd)
+        {
+            try
+            {
+                uint pid;
+                PadNative.GetWindowThreadProcessId(hwnd, out pid);
+                string proc = "?";
+                try { using (var p = System.Diagnostics.Process.GetProcessById((int)pid)) proc = p.ProcessName; } catch { }
+                var cls = new System.Text.StringBuilder(128);
+                var title = new System.Text.StringBuilder(128);
+                PadNative.GetClassName(hwnd, cls, cls.Capacity);
+                PadNative.GetWindowText(hwnd, title, title.Capacity);
+                return "process=" + proc + " class=" + cls + " title=\"" + title + "\"";
+            }
+            catch { return "unknown window"; }
         }
 
         /// <summary>Runs a pad action on the focused settings window. False = no settings window has focus.</summary>
@@ -862,6 +929,20 @@ namespace PlayniteGameOverlay
         }
 
         /// <summary>Square / X in Playnite Desktop: collapse or expand the selected game's group.</summary>
+        /// <summary>Start (on its own): open / close Playnite's main menu in Desktop mode.</summary>
+        private void HandlePadStart()
+        {
+            if (TryPadSettings(w => { })) return;       // a settings window owns the pad
+            if (IsOverlayNavActive()) return;            // the in-game overlay does not use Start on its own
+            if (Settings != null && !Settings.EnableDesktopControllerNav)
+                return;
+            if (!IsDesktopMode) return;                  // Fullscreen mode has its own menu button
+            if (!DesktopControllerNav.IsPlayniteDesktopForeground())
+                return;
+            try { DesktopControllerNav.ToggleMainMenu(); }
+            catch { }
+        }
+
         private void HandlePadSquare()
         {
             if (TryPadSettings(w => { })) return;       // a settings window owns the pad
@@ -1338,6 +1419,7 @@ namespace PlayniteGameOverlay
             overlayWindow?.Close();
             keyboardHook?.Dispose();
             Breadcrumb.Write("OnApplicationStopped end");
+            Breadcrumb.Flush();
         }
 
         private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
@@ -3496,7 +3578,7 @@ namespace PlayniteGameOverlay
                 try
                 {
                     if (Settings?.BorderlessWindowedGames == true && startedPid > 0)
-                        WindowHelper.StartBorderlessWatch(startedPid, m => log(m, "INFO"));
+                        WindowHelper.StartBorderlessWatch(startedPid, m => { log(m, "INFO"); try { Breadcrumb.Write(m); } catch { } });
                     else
                         WindowHelper.StopBorderlessWatch();
                 }
