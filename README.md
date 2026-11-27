@@ -3,6 +3,7 @@
 An in-game overlay for [Playnite](https://playnite.link), usable with keyboard or controller. Open it over any running game to see session info, adjust volume and FPS, check achievements, suspend or close the game, and launch your recording, streaming and chat tools without alt-tabbing.
 
 It also adds a set of quality-of-life tools to Playnite itself: faster game launching, automatic metadata and links, save-folder shortcuts, controller navigation, and a cleaner uninstall.
+
 **MADE WITH AI**
 
 ---
